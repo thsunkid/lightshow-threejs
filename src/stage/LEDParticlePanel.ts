@@ -16,8 +16,8 @@ export interface LEDPanelConfig {
   width: number;        // Panel width
   height: number;       // Panel height
   particleCount: number; // Number of particles (1000-5000)
-  baseColor: THREE.Color;
-  accentColor: THREE.Color;
+  warmColor: THREE.Color;   // Warm stripe color (amber/orange)
+  coolColor: THREE.Color;   // Cool stripe color (white-blue)
 }
 
 /**
@@ -59,36 +59,66 @@ export class LEDParticlePanel {
     // Create arrays for particle attributes
     const positions = new Float32Array(particleCount * 3);
     const originalPositions = new Float32Array(particleCount * 3);
+    const targetPositions = new Float32Array(particleCount * 3);
     const phases = new Float32Array(particleCount);
     const sizes = new Float32Array(particleCount);
 
-    // Distribute particles across the panel area
-    for (let i = 0; i < particleCount; i++) {
-      // Random position within panel bounds
-      const x = (Math.random() - 0.5) * width;
-      const y = (Math.random() - 0.5) * height;
-      const z = (Math.random() - 0.5) * 0.5; // Slight depth variation
+    // Create a grid-like distribution with some randomness
+    const cols = Math.ceil(Math.sqrt(particleCount * width / height));
+    const rows = Math.ceil(particleCount / cols);
+    const cellWidth = width / cols;
+    const cellHeight = height / rows;
 
-      // Store position
+    for (let i = 0; i < particleCount; i++) {
+      // Grid position with jitter
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+
+      // Base grid position
+      let x = (col - cols / 2 + 0.5) * cellWidth;
+      let y = (row - rows / 2 + 0.5) * cellHeight;
+
+      // Add some randomness
+      x += (Math.random() - 0.5) * cellWidth * 0.8;
+      y += (Math.random() - 0.5) * cellHeight * 0.8;
+
+      // Clamp to bounds
+      x = Math.max(-width / 2 * 0.95, Math.min(width / 2 * 0.95, x));
+      y = Math.max(-height / 2 * 0.95, Math.min(height / 2 * 0.95, y));
+
+      const z = (Math.random() - 0.5) * 0.2;
+
+      // Store original position
       positions[i * 3] = x;
       positions[i * 3 + 1] = y;
       positions[i * 3 + 2] = z;
 
-      // Store original position for displacement calculations
       originalPositions[i * 3] = x;
       originalPositions[i * 3 + 1] = y;
       originalPositions[i * 3 + 2] = z;
+
+      // Target position (Codrops-style) - particles move toward center when audio plays
+      // Create a swirling/converging pattern
+      const angle = Math.atan2(y, x);
+      const dist = Math.sqrt(x * x + y * y);
+      const targetDist = dist * 0.3; // Move toward center
+      const targetAngle = angle + Math.PI * 0.2; // Slight rotation
+
+      targetPositions[i * 3] = Math.cos(targetAngle) * targetDist;
+      targetPositions[i * 3 + 1] = Math.sin(targetAngle) * targetDist;
+      targetPositions[i * 3 + 2] = z + (Math.random() - 0.5) * 0.3;
 
       // Random phase for wave animation
       phases[i] = Math.random() * Math.PI * 2;
 
       // Varied particle sizes
-      sizes[i] = Math.random() * 3 + 1;
+      sizes[i] = Math.random() * 2.5 + 1.5;
     }
 
     // Set geometry attributes
     this.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     this.geometry.setAttribute('aOriginalPosition', new THREE.BufferAttribute(originalPositions, 3));
+    this.geometry.setAttribute('aTargetPosition', new THREE.BufferAttribute(targetPositions, 3));
     this.geometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
     this.geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
 
@@ -100,10 +130,11 @@ export class LEDParticlePanel {
         uOffsetGain: { value: 0 },
         uFrequency: { value: 0.5 },
         uBeat: { value: 0 },
-        uBaseColor: { value: this.config.baseColor },
-        uAccentColor: { value: this.config.accentColor },
-        uOpacity: { value: 0.3 },
+        uWarmColor: { value: this.config.warmColor },
+        uCoolColor: { value: this.config.coolColor },
+        uOpacity: { value: 0.4 },
         uIntensity: { value: 0 },
+        uBounds: { value: new THREE.Vector2(width / 2, height / 2) },
       },
       vertexShader,
       fragmentShader,
@@ -137,38 +168,37 @@ export class LEDParticlePanel {
     const currentAmplitude = this.material.uniforms.uAmplitude.value;
     this.material.uniforms.uAmplitude.value = lerp(
       currentAmplitude,
-      frame.lowEnergy * 1.5 + frame.highEnergy,
-      0.15
+      frame.lowEnergy * 1.2 + frame.highEnergy * 0.8,
+      0.12
     );
 
     // Mid frequencies control offset gain (wave motion)
     this.material.uniforms.uOffsetGain.value = lerp(
       this.material.uniforms.uOffsetGain.value,
-      frame.midEnergy * 0.5,
-      0.15
+      frame.midEnergy * 0.4,
+      0.12
     );
 
     // Beat pulse (quick attack, slow decay)
     if (frame.isBeat) {
-      // More dramatic beat response: 2.0 for downbeats, 1.5 for regular beats
       if (frame.isDownbeat) {
-        this.material.uniforms.uBeat.value = 2.0;
+        this.material.uniforms.uBeat.value = 1.8;
       } else {
-        this.material.uniforms.uBeat.value = 1.5;
+        this.material.uniforms.uBeat.value = 1.2;
       }
     } else {
-      this.material.uniforms.uBeat.value *= 0.9;
+      this.material.uniforms.uBeat.value *= 0.92;
     }
 
     // Advance time based on low frequency for rhythmic motion
-    this.material.uniforms.uTime.value += deltaTime * 0.001 * (1 + frame.lowEnergy);
+    this.material.uniforms.uTime.value += deltaTime * 0.001 * (1 + frame.lowEnergy * 0.5);
 
-    // Adjust opacity based on overall energy - reduced brightness
-    const targetOpacity = 0.1 + frame.energy * 0.5;
+    // Adjust opacity based on overall energy
+    const targetOpacity = 0.15 + frame.energy * 0.45;
     this.material.uniforms.uOpacity.value = lerp(
       this.material.uniforms.uOpacity.value,
       targetOpacity,
-      0.1
+      0.08
     );
 
     // Update intensity uniform for overall visibility control
@@ -176,30 +206,29 @@ export class LEDParticlePanel {
     this.material.uniforms.uIntensity.value = lerp(
       this.material.uniforms.uIntensity.value,
       targetIntensity,
-      0.1
+      0.08
     );
 
-    // On downbeats, add extra intensity
+    // On downbeats, increase frequency for more motion
     if (frame.isDownbeat) {
-      this.material.uniforms.uFrequency.value = 0.7;
+      this.material.uniforms.uFrequency.value = 0.65;
     } else {
-      // Gradually return to base frequency
       this.material.uniforms.uFrequency.value = lerp(
         this.material.uniforms.uFrequency.value,
-        0.5,
-        0.05
+        0.45,
+        0.04
       );
     }
   }
 
   /**
    * Set colors dynamically
-   * @param base Base color (RGB 0-1)
-   * @param accent Accent color (RGB 0-1)
+   * @param warm Warm color (RGB 0-1)
+   * @param cool Cool color (RGB 0-1)
    */
-  setColors(base: RGB, accent: RGB): void {
-    this.material.uniforms.uBaseColor.value.setRGB(base.r, base.g, base.b);
-    this.material.uniforms.uAccentColor.value.setRGB(accent.r, accent.g, accent.b);
+  setColors(warm: RGB, cool: RGB): void {
+    this.material.uniforms.uWarmColor.value.setRGB(warm.r, warm.g, warm.b);
+    this.material.uniforms.uCoolColor.value.setRGB(cool.r, cool.g, cool.b);
   }
 
   /**

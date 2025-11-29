@@ -181,6 +181,21 @@ export class Strobe extends BaseFixtureImpl<IStrobe> {
   }
 
   /**
+   * Sets enabled state - override to properly handle light visibility
+   */
+  setEnabled(enabled: boolean): void {
+    this.state.enabled = enabled;
+    this.group.visible = enabled;
+    // Important: Must explicitly set light visibility because lights affect
+    // the scene globally even when their parent group is hidden
+    this.pointLight.visible = enabled;
+    if (!enabled) {
+      this.isFlashing = false;
+      this.pointLight.intensity = 0;
+    }
+  }
+
+  /**
    * Cleans up Three.js resources
    */
   dispose(): void {

@@ -1,16 +1,19 @@
 uniform float uTime;
-uniform float uAmplitude;    // From high frequencies
+uniform float uAmplitude;    // From audio (controls displacement)
 uniform float uOffsetGain;   // From mid frequencies
 uniform float uFrequency;    // Animation frequency
 uniform float uBeat;         // Beat pulse (0-1)
 uniform float uIntensity;    // Overall particle visibility/intensity
+uniform vec2 uBounds;        // Panel bounds (width/2, height/2)
 
 attribute vec3 aOriginalPosition;
+attribute vec3 aTargetPosition;
 attribute float aPhase;
 attribute float aSize;
 
 varying float vDistance;
 varying float vAlpha;
+varying float vStripeIndex;  // For alternating colors
 
 //
 // Simplex 3D Noise
@@ -85,59 +88,51 @@ float snoise(vec3 v){
   return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
 }
 
-//
-// Curl Noise
-// Returns divergence-free vector field for fluid-like particle motion
-//
-vec3 curlNoise(vec3 p) {
-  const float e = 0.1;
-
-  // Sample noise at offset positions to compute curl
-  float n1 = snoise(vec3(p.x, p.y + e, p.z));
-  float n2 = snoise(vec3(p.x, p.y - e, p.z));
-  float n3 = snoise(vec3(p.x, p.y, p.z + e));
-  float n4 = snoise(vec3(p.x, p.y, p.z - e));
-  float n5 = snoise(vec3(p.x + e, p.y, p.z));
-  float n6 = snoise(vec3(p.x - e, p.y, p.z));
-
-  // Compute curl using finite differences
-  vec3 curl = vec3(
-    n1 - n2 - n3 + n4,
-    n3 - n4 - n5 + n6,
-    n5 - n6 - n1 + n2
-  );
-
-  return curl / (2.0 * e);
-}
-
 void main() {
   vec3 pos = aOriginalPosition;
 
-  // Apply curl noise displacement based on amplitude
+  // Calculate distance from center for effects
+  float distFromCenter = length(pos.xy) / length(uBounds);
+
+  // Codrops-style: interpolate toward target based on intensity
+  // When intensity is high, particles move toward target; when low, stay at original
+  float targetMix = pow(uIntensity, 2.0) * 0.6;
+  pos = mix(pos, aTargetPosition, targetMix);
+
+  // Add subtle wave motion (reduced to stay within bounds)
+  float waveX = sin(pos.x * 3.0 + uTime * 0.5 + aPhase) * uOffsetGain * 0.3;
+  float waveY = cos(pos.y * 3.0 + uTime * 0.5 + aPhase) * uOffsetGain * 0.2;
+  pos.x += waveX;
+  pos.y += waveY;
+
+  // Add noise-based displacement (reduced)
   vec3 noisePos = pos * uFrequency + uTime * 0.1;
-  vec3 curl = curlNoise(noisePos) * uAmplitude;
+  float noiseDisp = snoise(noisePos) * uAmplitude * 0.3;
+  pos.z += noiseDisp;
 
-  // Add wave motion
-  pos.z += sin(pos.x * 2.0 + uTime + aPhase) * uOffsetGain;
-  pos.y += cos(pos.y * 2.0 + uTime + aPhase) * uOffsetGain * 0.5;
+  // Beat response - subtle pulse expansion from center
+  float beatPulse = uBeat * 0.15 * (1.0 - distFromCenter * 0.5);
+  pos.xy *= 1.0 + beatPulse;
 
-  // Beat response - particles expand outward on beats
-  pos += normalize(pos) * uBeat * 0.5;
-
-  // Apply curl displacement scaled by intensity
-  // When audio is low, particles contract inward
-  pos += curl * (0.2 + uIntensity * 0.8);
-
-  // Contract particles toward origin when intensity is low
-  pos = mix(pos * 0.3, pos, 0.2 + uIntensity * 0.8);
+  // CLAMP to panel bounds to prevent escape
+  pos.x = clamp(pos.x, -uBounds.x * 0.95, uBounds.x * 0.95);
+  pos.y = clamp(pos.y, -uBounds.y * 0.95, uBounds.y * 0.95);
+  pos.z = clamp(pos.z, -0.5, 0.5);
 
   // Calculate distance for color interpolation
-  vDistance = length(pos - aOriginalPosition) / max(uAmplitude, 0.1);
-  vAlpha = (1.0 - vDistance * 0.3) * (0.3 + uIntensity * 0.7);
+  vDistance = length(pos - aOriginalPosition) / max(uAmplitude + 0.1, 0.2);
+  vAlpha = (0.5 + uIntensity * 0.5) * (1.0 - distFromCenter * 0.3);
+
+  // Pass stripe index based on y position (for alternating colors)
+  // Normalize y to 0-1 range, then create stripe bands
+  float normalizedY = (aOriginalPosition.y + uBounds.y) / (uBounds.y * 2.0);
+  vStripeIndex = floor(normalizedY * 8.0); // 8 stripes
 
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
 
-  // Size attenuation with intensity factor
-  gl_PointSize = aSize * (300.0 / -mvPosition.z) * (1.0 + uBeat * 0.5) * (0.5 + uIntensity * 0.5);
+  // Size with depth attenuation and intensity
+  float baseSize = aSize * (0.6 + uIntensity * 0.4);
+  float beatSize = 1.0 + uBeat * 0.3;
+  gl_PointSize = baseSize * (200.0 / -mvPosition.z) * beatSize;
 }

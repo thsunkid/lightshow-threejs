@@ -430,13 +430,13 @@ export class Stage {
     // Screen frame
     this.createScreenFrame(screen.position);
 
-    // Create LED particle panel
+    // Create LED particle panel with alternating warm/cool stripes
     this.ledParticlePanel = new LEDParticlePanel({
       width: this.config.width * 0.8,
       height: this.config.trussHeight * 0.7,
       particleCount: 3000,
-      baseColor: new THREE.Color(0x001030),
-      accentColor: new THREE.Color(0x4080ff),
+      warmColor: new THREE.Color(0xffc080),  // Warm amber/orange
+      coolColor: new THREE.Color(0xc0e0ff),  // Cool white-blue
     });
 
     const panelMesh = this.ledParticlePanel.getMesh();
@@ -896,49 +896,49 @@ export class Stage {
       const ledPanelFolder = this.gui.addFolder('LED Panel Colors');
       const panelMaterial = this.ledParticlePanel.getMesh().material as THREE.ShaderMaterial;
 
-      // Base color picker
-      const baseColorControl = {
+      // Warm color picker (amber/orange stripes)
+      const warmColorControl = {
         color: [
-          panelMaterial.uniforms.uBaseColor.value.r * 255,
-          panelMaterial.uniforms.uBaseColor.value.g * 255,
-          panelMaterial.uniforms.uBaseColor.value.b * 255
+          panelMaterial.uniforms.uWarmColor.value.r * 255,
+          panelMaterial.uniforms.uWarmColor.value.g * 255,
+          panelMaterial.uniforms.uWarmColor.value.b * 255
         ]
       };
-      ledPanelFolder.addColor(baseColorControl, 'color').onChange((value: number[]) => {
+      ledPanelFolder.addColor(warmColorControl, 'color').onChange((value: number[]) => {
         if (this.ledParticlePanel) {
           const mat = this.ledParticlePanel.getMesh().material as THREE.ShaderMaterial;
           this.ledParticlePanel.setColors(
             { r: value[0] / 255, g: value[1] / 255, b: value[2] / 255 },
             {
-              r: mat.uniforms.uAccentColor.value.r,
-              g: mat.uniforms.uAccentColor.value.g,
-              b: mat.uniforms.uAccentColor.value.b
+              r: mat.uniforms.uCoolColor.value.r,
+              g: mat.uniforms.uCoolColor.value.g,
+              b: mat.uniforms.uCoolColor.value.b
             }
           );
         }
-      }).name('Base Color');
+      }).name('Warm Color');
 
-      // Accent color picker
-      const accentColorControl = {
+      // Cool color picker (white-blue stripes)
+      const coolColorControl = {
         color: [
-          panelMaterial.uniforms.uAccentColor.value.r * 255,
-          panelMaterial.uniforms.uAccentColor.value.g * 255,
-          panelMaterial.uniforms.uAccentColor.value.b * 255
+          panelMaterial.uniforms.uCoolColor.value.r * 255,
+          panelMaterial.uniforms.uCoolColor.value.g * 255,
+          panelMaterial.uniforms.uCoolColor.value.b * 255
         ]
       };
-      ledPanelFolder.addColor(accentColorControl, 'color').onChange((value: number[]) => {
+      ledPanelFolder.addColor(coolColorControl, 'color').onChange((value: number[]) => {
         if (this.ledParticlePanel) {
           const mat = this.ledParticlePanel.getMesh().material as THREE.ShaderMaterial;
           this.ledParticlePanel.setColors(
             {
-              r: mat.uniforms.uBaseColor.value.r,
-              g: mat.uniforms.uBaseColor.value.g,
-              b: mat.uniforms.uBaseColor.value.b
+              r: mat.uniforms.uWarmColor.value.r,
+              g: mat.uniforms.uWarmColor.value.g,
+              b: mat.uniforms.uWarmColor.value.b
             },
             { r: value[0] / 255, g: value[1] / 255, b: value[2] / 255 }
           );
         }
-      }).name('Accent Color');
+      }).name('Cool Color');
     }
   }
 

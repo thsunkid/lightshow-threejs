@@ -118,7 +118,8 @@ export class WashLight extends BaseFixtureImpl<IWashLight> {
 
     this.glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
     this.glowMesh.position.x = 5;
-    this.glowMesh.rotation.z = -Math.PI / 2;
+    // Rotate so apex (narrow end) is at the light source, base (wide end) spreads outward
+    this.glowMesh.rotation.z = Math.PI / 2;
     this.group.add(this.glowMesh);
   }
 
@@ -199,6 +200,21 @@ export class WashLight extends BaseFixtureImpl<IWashLight> {
     // Handle non-transitional properties
     if (state.enabled !== undefined) {
       this.state.enabled = state.enabled;
+    }
+  }
+
+  /**
+   * Sets enabled state - override to properly handle light visibility
+   */
+  setEnabled(enabled: boolean): void {
+    this.state.enabled = enabled;
+    this.group.visible = enabled;
+    // Important: Must explicitly set light visibility because lights affect
+    // the scene globally even when their parent group is hidden
+    this.spotlight.visible = enabled;
+    this.glowMesh.visible = enabled;
+    if (!enabled) {
+      this.spotlight.intensity = 0;
     }
   }
 
