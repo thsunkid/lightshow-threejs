@@ -188,7 +188,7 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
 
     this.beamMesh = new THREE.Mesh(beamGeometry, beamMaterial);
     this.beamMesh.position.z = beamLength / 2;
-    this.beamMesh.rotation.x = Math.PI / 2;
+    this.beamMesh.rotation.x = -Math.PI / 2;
     this.tiltGroup.add(this.beamMesh);
   }
 

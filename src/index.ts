@@ -19,6 +19,17 @@ import type { AudioFrame, LightingCommand } from '@shared/types';
 console.log('Lightshow Generator initializing...');
 
 /**
+ * Track metadata interface
+ */
+interface TrackMetadata {
+  title: string;
+  artist: string;
+  album: string;
+  artwork: string | null;
+  duration: number;
+}
+
+/**
  * Main application class
  */
 class LightshowApp {
@@ -26,7 +37,24 @@ class LightshowApp {
   private stage!: Stage;
   private mappingEngine!: MappingEngine;
   private isPlaying = false;
-  private currentTimeDisplay: HTMLElement | null = null;
+  private updateTimer: number | null = null;
+  private isDragging = false;
+
+  // UI Elements
+  private playPauseBtn!: HTMLButtonElement;
+  private prevBtn!: HTMLButtonElement;
+  private nextBtn!: HTMLButtonElement;
+  private currentTimeEl!: HTMLElement;
+  private totalTimeEl!: HTMLElement;
+  private progressBar!: HTMLElement;
+  private progressHandle!: HTMLElement;
+  private progressBg!: HTMLElement;
+  private trackTitleEl!: HTMLElement;
+  private trackArtistEl!: HTMLElement;
+  private albumArtEl!: HTMLElement;
+  private volumeBar!: HTMLElement;
+  private volumeSlider!: HTMLElement;
+  private dropZone!: HTMLElement;
 
   constructor() {
     this.setupStage();
@@ -68,54 +96,56 @@ class LightshowApp {
   }
 
   private setupUI(): void {
-    const playBtn = document.getElementById('play-btn');
-    const pauseBtn = document.getElementById('pause-btn');
-    const stopBtn = document.getElementById('stop-btn');
+    // Get UI elements
+    this.playPauseBtn = document.getElementById('play-pause-btn') as HTMLButtonElement;
+    this.prevBtn = document.getElementById('prev-btn') as HTMLButtonElement;
+    this.nextBtn = document.getElementById('next-btn') as HTMLButtonElement;
+    this.currentTimeEl = document.getElementById('current-time')!;
+    this.totalTimeEl = document.getElementById('total-time')!;
+    this.progressBar = document.getElementById('progress-bar')!;
+    this.progressHandle = document.getElementById('progress-handle')!;
+    this.progressBg = document.getElementById('progress-bar-bg')!;
+    this.trackTitleEl = document.getElementById('track-title')!;
+    this.trackArtistEl = document.getElementById('track-artist')!;
+    this.albumArtEl = document.getElementById('album-art')!;
+    this.volumeBar = document.getElementById('volume-bar')!;
+    this.volumeSlider = document.getElementById('volume-slider')!;
+    this.dropZone = document.getElementById('drop-zone')!;
 
-    playBtn?.addEventListener('click', () => this.play());
-    pauseBtn?.addEventListener('click', () => this.pause());
-    stopBtn?.addEventListener('click', () => this.stop());
+    // Setup button handlers
+    this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+    this.prevBtn.addEventListener('click', () => this.previous());
+    this.nextBtn.addEventListener('click', () => this.next());
 
-    // Add a time display element
-    const controls = document.getElementById('controls');
-    if (controls) {
-      const timeDisplay = document.createElement('div');
-      timeDisplay.id = 'time-display';
-      timeDisplay.style.cssText = `
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        padding: 10px 20px;
-        border-radius: 4px;
-        min-width: 120px;
-        text-align: center;
-        font-family: monospace;
-      `;
-      timeDisplay.textContent = '00:00 / 00:00';
-      controls.appendChild(timeDisplay);
-      this.currentTimeDisplay = timeDisplay;
-    }
+    // Setup progress bar click to seek
+    this.progressBg.addEventListener('click', (e) => this.handleProgressClick(e));
+
+    // Setup progress bar drag
+    this.progressBg.addEventListener('mousedown', (e) => this.startDrag(e));
+
+    // Setup volume control
+    this.volumeSlider.addEventListener('click', (e) => this.handleVolumeClick(e));
   }
 
   private setupDragAndDrop(): void {
-    const dropZone = document.getElementById('drop-zone');
     const audioInput = document.getElementById('audio-input') as HTMLInputElement;
 
-    if (!dropZone || !audioInput) return;
+    if (!this.dropZone || !audioInput) return;
 
-    dropZone.addEventListener('click', () => audioInput.click());
+    this.dropZone.addEventListener('click', () => audioInput.click());
 
-    dropZone.addEventListener('dragover', (e) => {
+    this.dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
-      dropZone.style.borderColor = 'rgba(255, 255, 255, 0.8)';
+      this.dropZone.classList.add('dragging');
     });
 
-    dropZone.addEventListener('dragleave', () => {
-      dropZone.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+    this.dropZone.addEventListener('dragleave', () => {
+      this.dropZone.classList.remove('dragging');
     });
 
-    dropZone.addEventListener('drop', (e) => {
+    this.dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
-      dropZone.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+      this.dropZone.classList.remove('dragging');
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         this.loadAudio(files[0]);
@@ -129,10 +159,73 @@ class LightshowApp {
     });
   }
 
+  /**
+   * Extract metadata from audio file using jsmediatags
+   */
+  private extractMetadata(file: File): Promise<TrackMetadata> {
+    return new Promise((resolve) => {
+      // Check if jsmediatags is available
+      const jsmediatags = (window as any).jsmediatags;
+
+      if (!jsmediatags) {
+        console.warn('jsmediatags not loaded, using fallback');
+        resolve({
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          artist: 'Unknown Artist',
+          album: '',
+          artwork: null,
+          duration: 0
+        });
+        return;
+      }
+
+      jsmediatags.read(file, {
+        onSuccess: (tag: any) => {
+          const { title, artist, album, picture } = tag.tags;
+
+          let artwork = null;
+          if (picture) {
+            // Convert picture data to base64 data URL
+            const base64String = btoa(
+              picture.data.reduce((data: string, byte: number) => data + String.fromCharCode(byte), '')
+            );
+            artwork = `data:${picture.format};base64,${base64String}`;
+          }
+
+          resolve({
+            title: title || file.name.replace(/\.[^/.]+$/, ''),
+            artist: artist || 'Unknown Artist',
+            album: album || '',
+            artwork,
+            duration: 0
+          });
+        },
+        onError: (error: any) => {
+          console.warn('Error reading tags:', error);
+          resolve({
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            artist: 'Unknown Artist',
+            album: '',
+            artwork: null,
+            duration: 0
+          });
+        }
+      });
+    });
+  }
+
   private async loadAudio(file: File): Promise<void> {
     console.log(`Loading audio file: ${file.name}`);
-    const dropZone = document.getElementById('drop-zone');
-    dropZone?.classList.add('hidden');
+
+    // Extract metadata first
+    const metadata = await this.extractMetadata(file);
+    console.log('Metadata extracted:', metadata);
+
+    // Update UI with metadata
+    this.updateTrackInfo(metadata);
+
+    // Hide drop zone
+    this.dropZone.classList.add('hidden');
 
     try {
       // Initialize AudioAnalyzer if not already created
@@ -151,6 +244,10 @@ class LightshowApp {
       await this.audioAnalyzer.loadFile(file);
       console.log(`Audio file loaded successfully: ${file.name}`);
 
+      // Update duration once loaded
+      const duration = this.audioAnalyzer.getDuration();
+      this.totalTimeEl.textContent = this.formatTime(duration / 1000);
+
       // Set up frame callback to process audio and drive lights
       this.audioAnalyzer.onFrame((frame: AudioFrame) => {
         // Process audio frame through mapping engine
@@ -160,39 +257,153 @@ class LightshowApp {
         if (commands.length > 0) {
           this.stage.executeCommands(commands);
         }
-
-        // Update time display
-        this.updateTimeDisplay();
       });
 
-      // Update display to show file is loaded
-      this.updateTimeDisplay();
+      // Update display
+      this.updateProgress();
 
     } catch (error) {
       console.error('Failed to load audio file:', error);
       alert('Failed to load audio file. Please try another file.');
-      dropZone?.classList.remove('hidden');
+      this.dropZone.classList.remove('hidden');
     }
   }
 
-  private updateTimeDisplay(): void {
-    if (!this.currentTimeDisplay || !this.audioAnalyzer) return;
+  /**
+   * Update track info in UI
+   */
+  private updateTrackInfo(metadata: TrackMetadata): void {
+    this.trackTitleEl.textContent = metadata.title;
+    this.trackArtistEl.textContent = metadata.artist || '';
 
-    const currentTime = this.audioAnalyzer.getCurrentTime();
+    if (metadata.artwork) {
+      this.albumArtEl.innerHTML = `<img src="${metadata.artwork}" alt="Album Art" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;">`;
+      this.albumArtEl.classList.remove('placeholder');
+    } else {
+      this.albumArtEl.innerHTML = '';
+      this.albumArtEl.classList.add('placeholder');
+    }
+  }
+
+  /**
+   * Format time from seconds to MM:SS
+   */
+  private formatTime(seconds: number): string {
+    if (isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Update progress display continuously
+   */
+  private updateProgress(): void {
+    if (!this.audioAnalyzer) return;
+
+    const currentTime = this.audioAnalyzer.getCurrentTime() / 1000;
+    const duration = this.audioAnalyzer.getDuration() / 1000;
+
+    // Update time displays
+    this.currentTimeEl.textContent = this.formatTime(currentTime);
+    this.totalTimeEl.textContent = this.formatTime(duration);
+
+    // Update progress bar
+    if (duration > 0 && !this.isDragging) {
+      const progress = (currentTime / duration) * 100;
+      this.progressBar.style.width = `${progress}%`;
+      this.progressHandle.style.left = `${progress}%`;
+    }
+
+    // Continue updating if playing
+    if (this.isPlaying) {
+      this.updateTimer = requestAnimationFrame(() => this.updateProgress());
+    }
+  }
+
+  /**
+   * Handle progress bar click to seek
+   */
+  private handleProgressClick(e: MouseEvent): void {
+    if (!this.audioAnalyzer) return;
+
+    const rect = this.progressBg.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
     const duration = this.audioAnalyzer.getDuration();
+    const seekTime = percent * duration;
 
-    const formatTime = (ms: number): string => {
-      const seconds = Math.floor(ms / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const remainingSeconds = seconds % 60;
-      return `${minutes.toString().padStart(2, '0')}:${remainingSeconds
-        .toString()
-        .padStart(2, '0')}`;
+    this.audioAnalyzer.seek(seekTime);
+    this.updateProgress();
+  }
+
+  /**
+   * Handle dragging on progress bar
+   */
+  private startDrag(_e: MouseEvent): void {
+    if (!this.audioAnalyzer) return;
+
+    this.isDragging = true;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!this.isDragging) return;
+
+      const rect = this.progressBg.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+
+      // Update visual position immediately
+      this.progressBar.style.width = `${percent * 100}%`;
+      this.progressHandle.style.left = `${percent * 100}%`;
+
+      // Update time display
+      const duration = this.audioAnalyzer!.getDuration() / 1000;
+      this.currentTimeEl.textContent = this.formatTime(percent * duration);
     };
 
-    this.currentTimeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(
-      duration
-    )}`;
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!this.isDragging) return;
+      this.isDragging = false;
+
+      // Perform the actual seek
+      const rect = this.progressBg.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const duration = this.audioAnalyzer!.getDuration();
+      const seekTime = percent * duration;
+
+      this.audioAnalyzer!.seek(seekTime);
+
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }
+
+  /**
+   * Handle volume slider click
+   */
+  private handleVolumeClick(e: MouseEvent): void {
+    const rect = this.volumeSlider.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const volume = Math.max(0, Math.min(1, percent));
+
+    this.volumeBar.style.width = `${volume * 100}%`;
+
+    // TODO: Actually set volume on audio context
+    // if (this.audioAnalyzer) {
+    //   this.audioAnalyzer.setVolume(volume);
+    // }
+  }
+
+  /**
+   * Toggle play/pause
+   */
+  private togglePlayPause(): void {
+    if (this.isPlaying) {
+      this.pause();
+    } else {
+      this.play();
+    }
   }
 
   private play(): void {
@@ -204,33 +415,52 @@ class LightshowApp {
     if (this.isPlaying) return;
 
     this.isPlaying = true;
+    this.playPauseBtn.innerHTML = '❚❚';
     console.log('Playing...');
 
     // Start audio playback
     this.audioAnalyzer.play();
+
+    // Start updating progress
+    this.updateProgress();
   }
 
   private pause(): void {
     if (!this.audioAnalyzer) return;
 
     this.isPlaying = false;
+    this.playPauseBtn.innerHTML = '▶';
     console.log('Paused');
 
     // Pause audio
     this.audioAnalyzer.pause();
+
+    // Stop update timer
+    if (this.updateTimer) {
+      cancelAnimationFrame(this.updateTimer);
+      this.updateTimer = null;
+    }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private stop(): void {
     if (!this.audioAnalyzer) return;
 
     this.isPlaying = false;
+    this.playPauseBtn.innerHTML = '▶';
     console.log('Stopped');
 
     // Stop audio and reset
     this.audioAnalyzer.stop();
 
     // Update time display to show reset
-    this.updateTimeDisplay();
+    this.updateProgress();
+
+    // Stop update timer
+    if (this.updateTimer) {
+      cancelAnimationFrame(this.updateTimer);
+      this.updateTimer = null;
+    }
 
     // Reset all lights to default state
     this.stage.executeCommands([{
@@ -244,6 +474,25 @@ class LightshowApp {
     }]);
   }
 
+  /**
+   * Previous track (placeholder)
+   */
+  private previous(): void {
+    console.log('Previous track - not implemented');
+    // Could restart current track or load previous from playlist
+    if (this.audioAnalyzer) {
+      this.audioAnalyzer.seek(0);
+      this.updateProgress();
+    }
+  }
+
+  /**
+   * Next track (placeholder)
+   */
+  private next(): void {
+    console.log('Next track - not implemented');
+    // Could load next track from playlist
+  }
 }
 
 // Initialize app when DOM is ready

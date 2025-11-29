@@ -15,73 +15,311 @@
         color: #fff;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         overflow: hidden;
-      }
-      #app {
-        width: 100vw;
-        height: 100vh;
-        position: relative;
-      }
-      #canvas-container {
-        width: 100%;
-        height: 100%;
-      }
-      #controls {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
         display: flex;
-        gap: 10px;
-        z-index: 100;
+        flex-direction: column;
+        height: 100vh;
       }
-      button {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        color: #fff;
-        padding: 10px 20px;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background 0.2s;
+
+      /* Main canvas area */
+      #canvas-container {
+        flex: 1;
+        width: 100%;
+        position: relative;
+        background: linear-gradient(180deg, #000 0%, #0a0a0a 100%);
       }
-      button:hover {
-        background: rgba(255, 255, 255, 0.2);
-      }
+
+      /* Drop zone */
       #drop-zone {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        padding: 40px 60px;
-        border: 2px dashed rgba(255, 255, 255, 0.3);
-        border-radius: 8px;
+        padding: 60px 80px;
+        border: 2px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 12px;
         text-align: center;
         z-index: 100;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
       }
+
+      #drop-zone:hover {
+        border-color: rgba(255, 255, 255, 0.4);
+        background: rgba(0, 0, 0, 0.8);
+      }
+
+      #drop-zone.dragging {
+        border-color: #1db954;
+        background: rgba(29, 185, 84, 0.1);
+      }
+
       #drop-zone.hidden {
         display: none;
       }
+
       #drop-zone h2 {
         margin-bottom: 10px;
+        font-size: 24px;
+        font-weight: 600;
       }
+
       #drop-zone p {
         color: rgba(255, 255, 255, 0.6);
+        font-size: 14px;
+      }
+
+      /* Player bar */
+      #player-bar {
+        position: relative;
+        height: 100px;
+        background: #1a1a1a;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        gap: 30px;
+        z-index: 200;
+      }
+
+      /* Track info section */
+      #track-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        min-width: 300px;
+        flex-shrink: 0;
+      }
+
+      #album-art {
+        width: 64px;
+        height: 64px;
+        background: #2a2a2a;
+        border-radius: 6px;
+        object-fit: cover;
+        flex-shrink: 0;
+      }
+
+      #album-art.placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #2a2a2a, #3a3a3a);
+      }
+
+      #album-art.placeholder::after {
+        content: '♪';
+        font-size: 28px;
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      #track-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      #track-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: #fff;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      #track-artist {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Player controls */
+      #player-controls {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-shrink: 0;
+      }
+
+      .control-btn {
+        background: none;
+        border: none;
+        color: #fff;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        padding: 8px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .control-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        transform: scale(1.05);
+      }
+
+      #play-pause-btn {
+        width: 40px;
+        height: 40px;
+        background: #fff;
+        color: #000;
+        font-size: 18px;
+      }
+
+      #play-pause-btn:hover {
+        background: #e0e0e0;
+        transform: scale(1.1);
+      }
+
+      .control-btn.secondary {
+        font-size: 16px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      /* Progress section */
+      #progress-container {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        max-width: 600px;
+      }
+
+      .time-display {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.7);
+        font-variant-numeric: tabular-nums;
+        min-width: 40px;
+        text-align: center;
+      }
+
+      #progress-bar-bg {
+        flex: 1;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        position: relative;
+        cursor: pointer;
+        overflow: visible;
+      }
+
+      #progress-bar {
+        height: 100%;
+        background: #1db954;
+        border-radius: 2px;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0%;
+        transition: width 0.1s linear;
+        pointer-events: none;
+      }
+
+      #progress-handle {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        background: #fff;
+        border-radius: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        left: 0%;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      #progress-bar-bg:hover #progress-handle {
+        opacity: 1;
+      }
+
+      #progress-bar-bg:hover #progress-bar {
+        background: #1ed760;
+      }
+
+      /* Volume control (optional) */
+      #volume-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+      }
+
+      .volume-icon {
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      #volume-slider {
+        width: 80px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        position: relative;
+        cursor: pointer;
+      }
+
+      #volume-bar {
+        height: 100%;
+        background: #fff;
+        border-radius: 2px;
+        width: 100%;
+        pointer-events: none;
+      }
+
+      /* Hide the old controls */
+      #controls {
+        display: none;
       }
     </style>
   </head>
   <body>
-    <div id="app">
-      <div id="canvas-container"></div>
-      <div id="drop-zone">
-        <h2>Drop an audio file</h2>
-        <p>or click to browse</p>
-        <input type="file" id="audio-input" accept="audio/*" hidden />
+    <div id="canvas-container"></div>
+
+    <div id="drop-zone">
+      <h2>Drop an audio file</h2>
+      <p>or click to browse</p>
+      <input type="file" id="audio-input" accept="audio/*" hidden />
+    </div>
+
+    <div id="player-bar">
+      <div id="track-info">
+        <div id="album-art" class="placeholder"></div>
+        <div id="track-text">
+          <div id="track-title">Drop a song to start</div>
+          <div id="track-artist"></div>
+        </div>
       </div>
-      <div id="controls">
-        <button id="play-btn">Play</button>
-        <button id="pause-btn">Pause</button>
-        <button id="stop-btn">Stop</button>
+
+      <div id="player-controls">
+        <button id="prev-btn" class="control-btn secondary">⏮</button>
+        <button id="play-pause-btn" class="control-btn">▶</button>
+        <button id="next-btn" class="control-btn secondary">⏭</button>
+      </div>
+
+      <div id="progress-container">
+        <span id="current-time" class="time-display">0:00</span>
+        <div id="progress-bar-bg">
+          <div id="progress-bar"></div>
+          <div id="progress-handle"></div>
+        </div>
+        <span id="total-time" class="time-display">0:00</span>
+      </div>
+
+      <div id="volume-control">
+        <span class="volume-icon">🔊</span>
+        <div id="volume-slider">
+          <div id="volume-bar"></div>
+        </div>
       </div>
     </div>
+
+    <script src="/node_modules/jsmediatags/dist/jsmediatags.min.js"></script>
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>

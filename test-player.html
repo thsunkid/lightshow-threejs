@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Music Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        #test-info {
+            margin-top: 20px;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        .test-step {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+        }
+        .success {
+            color: #4caf50;
+        }
+        .error {
+            color: #f44336;
+        }
+        .warning {
+            color: #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <h1>Music Player Test</h1>
+    <div id="test-info">
+        <div class="test-step">
+            <h3>Test Instructions:</h3>
+            <ol>
+                <li>Open the main app at <a href="http://localhost:3002" target="_blank">http://localhost:3002</a></li>
+                <li>Drop or browse for the test file: <code>/Users/thesunkid/Desktop/code/lightshow/public/assets/Neverender - Justice.mp3</code></li>
+                <li>Check the following features:</li>
+                <ul>
+                    <li>✓ Album artwork displays (or placeholder if no artwork)</li>
+                    <li>✓ Track title shows "Neverender" (or filename if no metadata)</li>
+                    <li>✓ Artist shows "Justice" (or "Unknown Artist" if no metadata)</li>
+                    <li>✓ Time display updates in real-time when playing</li>
+                    <li>✓ Progress bar fills as song plays</li>
+                    <li>✓ Clicking on progress bar seeks to that position</li>
+                    <li>✓ Dragging progress bar scrubs through the song</li>
+                    <li>✓ Play button changes to pause icon when playing</li>
+                    <li>✓ Previous button restarts the song</li>
+                </ul>
+            </ol>
+        </div>
+
+        <div class="test-step">
+            <h3>Expected UI Layout:</h3>
+            <pre>
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│                         [3D STAGE CANVAS]                               │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌──────┐   Neverender                        ⏮  ▶/❚❚  ⏭              │
+│  │ ART  │   Justice                                                     │
+│  │      │                                                               │
+│  └──────┘   0:45 ════════════●══════════════════════════════ 4:42       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+            </pre>
+        </div>
+
+        <div class="test-step">
+            <h3>Features Implemented:</h3>
+            <ul class="success">
+                <li>✓ Modern Spotify-like dark theme player UI</li>
+                <li>✓ Album artwork extraction using jsmediatags</li>
+                <li>✓ Track metadata display (title, artist, album)</li>
+                <li>✓ Real-time progress updates with requestAnimationFrame</li>
+                <li>✓ Clickable and draggable progress bar for seeking</li>
+                <li>✓ Play/pause toggle button with icon change</li>
+                <li>✓ Previous button to restart track</li>
+                <li>✓ Time display in MM:SS format</li>
+                <li>✓ Volume control UI (visual only)</li>
+                <li>✓ Responsive layout with flexbox</li>
+            </ul>
+        </div>
+
+        <div class="test-step">
+            <h3>Known Issues Fixed:</h3>
+            <ul class="success">
+                <li>✓ Time display now updates continuously during playback</li>
+                <li>✓ Progress bar shows current position and can be scrubbed</li>
+                <li>✓ Album artwork is extracted and displayed</li>
+                <li>✓ UI follows modern music player design patterns</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
