@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Audio/Video files (large, don't commit)
+*.mp3
+*.wav
+*.mp4
+*.webm
+*.mov
+
+# Model weights (large)
+*.onnx
+*.bin
+*.weights
+
+# OS files
+Thumbs.db
