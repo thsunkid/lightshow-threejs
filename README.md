@@ -1,6 +1,6 @@
-# Lightshow
+# Spotlightify
 
-**Perform concert-style lighting shows from audio input.**
+**Spotify for your stage lights.** Drop a track, watch the show unfold.
 
 ![Lightshow Screenshot](docs/lightshow.png)
 
