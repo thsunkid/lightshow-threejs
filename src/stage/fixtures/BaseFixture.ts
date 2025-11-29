@@ -91,6 +91,7 @@ export abstract class BaseFixtureImpl<T extends IBaseFixture = IBaseFixture> {
    */
   setEnabled(enabled: boolean): void {
     this.state.enabled = enabled;
+    this.group.visible = enabled;
     if (this.light) {
       this.light.visible = enabled;
     }

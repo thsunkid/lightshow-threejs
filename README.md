@@ -15,6 +15,40 @@ Drop an MP3 file into the browser, and watch as the 3D stage comes alive with li
 - **Spectral content** — Color shifts from warm to cool
 - **Song sections** — Dramatic changes on drops and breakdowns
 
+## Stage Layout
+
+```
+                           BACK TRUSS
+    ╔═══════════════════════════════════════════════════════╗
+    ║   [MH]    [MH]    [MH]    [MH]    [MH]    [MH]        ║
+    ╠═══════════════════════════════════════════════════════╣
+    ║                                                       ║
+    ║   ┌───┐          ╔═══════════════════╗          ┌───┐ ║
+    ║   │[W]│          ║                   ║          │[W]│ ║
+    ║   │   │          ║   LED SCREEN      ║          │   │ ║
+    ║   │[S]│  TOWER   ║   (Particles)     ║  TOWER   │[S]│ ║
+    ║   │   │          ║                   ║          │   │ ║
+    ║   │[W]│          ║                   ║          │[W]│ ║
+    ║   └───┘          ╚═══════════════════╝          └───┘ ║
+    ║                                                       ║
+    ╠═══════════════════════════════════════════════════════╣
+    ║                   STAGE FLOOR                         ║
+    ╠═══════════════════════════════════════════════════════╣
+    ║                                                       ║
+    ║         [MH]       [MH]       [MH]       [MH]         ║
+    ╚═══════════════════════════════════════════════════════╝
+                         FRONT TRUSS
+
+                        AUDIENCE AREA
+    ════════════════════════════════════════════════════════
+                (Barrier)     (Floor)
+
+    Legend:
+    [MH] = Moving Head (pan/tilt spotlight with beam)
+    [W]  = Wash Light (area flood lighting)
+    [S]  = Strobe (flash effect)
+```
+
 ## Features
 
 ### Audio Analysis

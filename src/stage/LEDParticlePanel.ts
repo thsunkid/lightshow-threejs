@@ -102,7 +102,8 @@ export class LEDParticlePanel {
         uBeat: { value: 0 },
         uBaseColor: { value: this.config.baseColor },
         uAccentColor: { value: this.config.accentColor },
-        uOpacity: { value: 1.0 },
+        uOpacity: { value: 0.3 },
+        uIntensity: { value: 0 },
       },
       vertexShader,
       fragmentShader,
@@ -132,11 +133,12 @@ export class LEDParticlePanel {
     if (!this.enabled) return;
 
     // Map audio features to uniforms with smooth interpolation
-    // High frequencies control amplitude (particle displacement)
+    // Bass and high frequencies control amplitude (particle displacement)
+    const currentAmplitude = this.material.uniforms.uAmplitude.value;
     this.material.uniforms.uAmplitude.value = lerp(
-      this.material.uniforms.uAmplitude.value,
-      frame.highEnergy * 2.0,
-      0.1
+      currentAmplitude,
+      frame.lowEnergy * 1.5 + frame.highEnergy,
+      0.15
     );
 
     // Mid frequencies control offset gain (wave motion)
@@ -148,7 +150,12 @@ export class LEDParticlePanel {
 
     // Beat pulse (quick attack, slow decay)
     if (frame.isBeat) {
-      this.material.uniforms.uBeat.value = 1.0;
+      // More dramatic beat response: 2.0 for downbeats, 1.5 for regular beats
+      if (frame.isDownbeat) {
+        this.material.uniforms.uBeat.value = 2.0;
+      } else {
+        this.material.uniforms.uBeat.value = 1.5;
+      }
     } else {
       this.material.uniforms.uBeat.value *= 0.9;
     }
@@ -156,17 +163,24 @@ export class LEDParticlePanel {
     // Advance time based on low frequency for rhythmic motion
     this.material.uniforms.uTime.value += deltaTime * 0.001 * (1 + frame.lowEnergy);
 
-    // Adjust opacity based on overall energy
-    const targetOpacity = 0.3 + frame.energy * 0.7;
+    // Adjust opacity based on overall energy - reduced brightness
+    const targetOpacity = 0.1 + frame.energy * 0.5;
     this.material.uniforms.uOpacity.value = lerp(
       this.material.uniforms.uOpacity.value,
       targetOpacity,
       0.1
     );
 
+    // Update intensity uniform for overall visibility control
+    const targetIntensity = frame.energy;
+    this.material.uniforms.uIntensity.value = lerp(
+      this.material.uniforms.uIntensity.value,
+      targetIntensity,
+      0.1
+    );
+
     // On downbeats, add extra intensity
     if (frame.isDownbeat) {
-      this.material.uniforms.uBeat.value = 1.5;
       this.material.uniforms.uFrequency.value = 0.7;
     } else {
       // Gradually return to base frequency

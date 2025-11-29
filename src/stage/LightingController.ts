@@ -23,6 +23,10 @@ export class LightingController {
   private fixtures: Map<string, BaseFixtureImpl> = new Map();
   private scene: THREE.Scene;
   private fixtureGroup: THREE.Group;
+  private manualOverrideActive: boolean = false;
+  private overrideEndTime: number = 0;
+  private postEffectDimFactor: number = 1.0;
+  private dimEndTime: number = 0;
 
   /**
    * Creates a new lighting controller
@@ -186,10 +190,48 @@ export class LightingController {
   }
 
   /**
+   * Triggers a manual effect that temporarily overrides audio
+   * @param durationMs How long the override lasts
+   * @param dimAfterMs How long to dim lights after effect (0 = no dim)
+   */
+  setManualOverride(durationMs: number, dimAfterMs: number = 0): void {
+    this.manualOverrideActive = true;
+    this.overrideEndTime = performance.now() + durationMs;
+    if (dimAfterMs > 0) {
+      this.dimEndTime = this.overrideEndTime + dimAfterMs;
+      this.postEffectDimFactor = 0.2; // Dim to 20%
+    }
+  }
+
+  isManualOverrideActive(): boolean {
+    return this.manualOverrideActive;
+  }
+
+  getPostEffectDimFactor(): number {
+    return this.postEffectDimFactor;
+  }
+
+  /**
    * Updates all fixtures
    * @param deltaTime Time since last frame in milliseconds
    */
   update(deltaTime: number): void {
+    const now = performance.now();
+
+    // Check if manual override has ended
+    if (this.manualOverrideActive && now > this.overrideEndTime) {
+      this.manualOverrideActive = false;
+    }
+
+    // Handle post-effect dim fade back
+    if (this.postEffectDimFactor < 1.0 && now < this.dimEndTime) {
+      // Keep dimmed
+    } else if (this.postEffectDimFactor < 1.0) {
+      // Gradually restore brightness over 500ms
+      this.postEffectDimFactor = Math.min(1.0, this.postEffectDimFactor + deltaTime * 0.002);
+    }
+
+    // Update all fixtures
     this.fixtures.forEach((fixture) => {
       fixture.update(deltaTime);
     });
@@ -227,6 +269,7 @@ export class LightingController {
    * @param transitionMs Transition duration
    */
   whiteout(transitionMs: number = 0): void {
+    this.setManualOverride(transitionMs, 2000); // 2s dim after whiteout
     this.setAllFixtures(
       {
         intensity: 1,
@@ -242,6 +285,7 @@ export class LightingController {
    * @param duration Flash duration in ms
    */
   flashStrobes(duration: number = 50): void {
+    this.setManualOverride(duration, 1500); // 1.5s dim after flash
     const strobes = this.getFixturesByType('strobe');
     for (const strobe of strobes) {
       if (strobe instanceof Strobe) {

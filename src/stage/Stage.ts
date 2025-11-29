@@ -844,11 +844,102 @@ export class Stage {
     lightingFolder.add({ whiteout: () => this.lightingController.whiteout(200) }, 'whiteout');
     lightingFolder.add({ flash: () => this.lightingController.flashStrobes(100) }, 'flash');
 
+    // Light toggles
+    const toggleFolder = this.gui.addFolder('Light Toggles');
+
+    // Moving heads toggle
+    const movingHeadState = { enabled: true };
+    toggleFolder.add(movingHeadState, 'enabled').name('Moving Heads').onChange((value: boolean) => {
+      this.lightingController.getFixturesByType('moving_head').forEach(fixture => {
+        fixture.setEnabled(value);
+      });
+    });
+
+    // Strobes toggle
+    const strobeState = { enabled: true };
+    toggleFolder.add(strobeState, 'enabled').name('Strobes').onChange((value: boolean) => {
+      this.lightingController.getFixturesByType('strobe').forEach(fixture => {
+        fixture.setEnabled(value);
+      });
+    });
+
+    // Wash lights toggle
+    const washState = { enabled: true };
+    toggleFolder.add(washState, 'enabled').name('Wash Lights').onChange((value: boolean) => {
+      this.lightingController.getFixturesByType('wash').forEach(fixture => {
+        fixture.setEnabled(value);
+      });
+    });
+
+    // Flake lights toggle (uses FlakeLightController)
+    const flakeState = { enabled: true };
+    toggleFolder.add(flakeState, 'enabled').name('Flake Lights').onChange((value: boolean) => {
+      this.flakeLightController.setEnabled(value);
+    });
+
+    // LED Panel toggle
+    const ledState = { enabled: true };
+    toggleFolder.add(ledState, 'enabled').name('LED Panel').onChange((value: boolean) => {
+      if (this.ledParticlePanel) {
+        this.ledParticlePanel.setEnabled(value);
+      }
+    });
+
     // Test patterns
     const testFolder = this.gui.addFolder('Test Patterns');
     testFolder.add({ rainbow: () => this.testRainbowPattern() }, 'rainbow');
     testFolder.add({ sweep: () => this.testSweepPattern() }, 'sweep');
     testFolder.add({ pulse: () => this.testPulsePattern() }, 'pulse');
+
+    // LED Panel detailed controls
+    if (this.ledParticlePanel) {
+      const ledPanelFolder = this.gui.addFolder('LED Panel Colors');
+      const panelMaterial = this.ledParticlePanel.getMesh().material as THREE.ShaderMaterial;
+
+      // Base color picker
+      const baseColorControl = {
+        color: [
+          panelMaterial.uniforms.uBaseColor.value.r * 255,
+          panelMaterial.uniforms.uBaseColor.value.g * 255,
+          panelMaterial.uniforms.uBaseColor.value.b * 255
+        ]
+      };
+      ledPanelFolder.addColor(baseColorControl, 'color').onChange((value: number[]) => {
+        if (this.ledParticlePanel) {
+          const mat = this.ledParticlePanel.getMesh().material as THREE.ShaderMaterial;
+          this.ledParticlePanel.setColors(
+            { r: value[0] / 255, g: value[1] / 255, b: value[2] / 255 },
+            {
+              r: mat.uniforms.uAccentColor.value.r,
+              g: mat.uniforms.uAccentColor.value.g,
+              b: mat.uniforms.uAccentColor.value.b
+            }
+          );
+        }
+      }).name('Base Color');
+
+      // Accent color picker
+      const accentColorControl = {
+        color: [
+          panelMaterial.uniforms.uAccentColor.value.r * 255,
+          panelMaterial.uniforms.uAccentColor.value.g * 255,
+          panelMaterial.uniforms.uAccentColor.value.b * 255
+        ]
+      };
+      ledPanelFolder.addColor(accentColorControl, 'color').onChange((value: number[]) => {
+        if (this.ledParticlePanel) {
+          const mat = this.ledParticlePanel.getMesh().material as THREE.ShaderMaterial;
+          this.ledParticlePanel.setColors(
+            {
+              r: mat.uniforms.uBaseColor.value.r,
+              g: mat.uniforms.uBaseColor.value.g,
+              b: mat.uniforms.uBaseColor.value.b
+            },
+            { r: value[0] / 255, g: value[1] / 255, b: value[2] / 255 }
+          );
+        }
+      }).name('Accent Color');
+    }
   }
 
   /**
@@ -1075,6 +1166,14 @@ export class Stage {
    */
   getLEDParticlePanel(): LEDParticlePanel | undefined {
     return this.ledParticlePanel;
+  }
+
+  /**
+   * Gets the lighting controller
+   * @returns Lighting controller
+   */
+  getLightingController(): LightingController {
+    return this.lightingController;
   }
 
   /**

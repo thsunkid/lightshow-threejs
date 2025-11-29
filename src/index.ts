@@ -387,7 +387,7 @@ class LightshowApp {
       };
 
       // Process audio frame through mapping engine
-      const commands: LightingCommand[] = this.mappingEngine.process(legacyFrame as any);
+      let commands: LightingCommand[] = this.mappingEngine.process(legacyFrame as any);
 
       // Debug: Log commands on beats
       if (frame.isBeat && commands.length > 0) {
@@ -399,6 +399,20 @@ class LightshowApp {
         console.log(`Firing ${frame.cues.length} cues:`, frame.cues.map(c => c.action));
       }
 
+      // Get dim factor from lighting controller
+      const dimFactor = this.stage.getLightingController()?.getPostEffectDimFactor() ?? 1.0;
+
+      // Apply dim factor to commands if not in manual override
+      if (dimFactor < 1.0) {
+        commands = commands.map(cmd => ({
+          ...cmd,
+          updates: {
+            ...cmd.updates,
+            intensity: (cmd.updates.intensity ?? 1) * dimFactor
+          }
+        }));
+      }
+
       // Execute commands on stage
       if (commands.length > 0) {
         this.stage.executeCommands(commands);
@@ -406,6 +420,9 @@ class LightshowApp {
 
       // Update flake lights based on audio
       this.stage.updateFlakeLights(legacyFrame as any);
+
+      // Update LED particle panel based on audio
+      this.stage.updateLEDPanel(legacyFrame as any);
 
       this.animationFrameId = requestAnimationFrame(updateFrame);
     };

@@ -3,6 +3,7 @@ uniform float uAmplitude;    // From high frequencies
 uniform float uOffsetGain;   // From mid frequencies
 uniform float uFrequency;    // Animation frequency
 uniform float uBeat;         // Beat pulse (0-1)
+uniform float uIntensity;    // Overall particle visibility/intensity
 
 attribute vec3 aOriginalPosition;
 attribute float aPhase;
@@ -123,16 +124,20 @@ void main() {
   // Beat response - particles expand outward on beats
   pos += normalize(pos) * uBeat * 0.5;
 
-  // Apply curl displacement
-  pos += curl;
+  // Apply curl displacement scaled by intensity
+  // When audio is low, particles contract inward
+  pos += curl * (0.2 + uIntensity * 0.8);
+
+  // Contract particles toward origin when intensity is low
+  pos = mix(pos * 0.3, pos, 0.2 + uIntensity * 0.8);
 
   // Calculate distance for color interpolation
   vDistance = length(pos - aOriginalPosition) / max(uAmplitude, 0.1);
-  vAlpha = 1.0 - vDistance * 0.3;
+  vAlpha = (1.0 - vDistance * 0.3) * (0.3 + uIntensity * 0.7);
 
   vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
 
-  // Size attenuation
-  gl_PointSize = aSize * (300.0 / -mvPosition.z) * (1.0 + uBeat * 0.5);
+  // Size attenuation with intensity factor
+  gl_PointSize = aSize * (300.0 / -mvPosition.z) * (1.0 + uBeat * 0.5) * (0.5 + uIntensity * 0.5);
 }

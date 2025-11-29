@@ -93,7 +93,9 @@ export class AdvancedAnalyzer {
       ...config
     };
 
-    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // Use Tone.js's AudioContext for consistency - this is critical!
+    // We need the same context for both decoding and connecting to Tone.js player
+    this.audioContext = Tone.getContext().rawContext as AudioContext;
 
     // Initialize Tone.js context
     Tone.start();
@@ -403,20 +405,30 @@ export class AdvancedAnalyzer {
    */
   private setupAnalyser(): void {
     if (!this.player) {
+      console.warn('[AdvancedAnalyzer] setupAnalyser called without player');
       return;
     }
 
-    // Create analyser node
-    this.analyser = this.audioContext.createAnalyser();
-    this.analyser.fftSize = this.config.fftSize;
-    this.analyser.smoothingTimeConstant = 0.8;
+    try {
+      console.log('[AdvancedAnalyzer] Creating analyser node...');
+      // Create analyser node
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = this.config.fftSize;
+      this.analyser.smoothingTimeConstant = 0.8;
 
-    // Initialize FFT data arrays
-    this.fftData = new Float32Array(this.analyser.frequencyBinCount) as Float32Array<ArrayBuffer>;
-    this.previousSpectrum = new Float32Array(this.analyser.frequencyBinCount);
+      console.log('[AdvancedAnalyzer] Initializing FFT data arrays...');
+      // Initialize FFT data arrays
+      this.fftData = new Float32Array(this.analyser.frequencyBinCount) as Float32Array<ArrayBuffer>;
+      this.previousSpectrum = new Float32Array(this.analyser.frequencyBinCount);
 
-    // Connect Tone.js to analyser
-    Tone.connect(this.player, this.analyser);
+      console.log('[AdvancedAnalyzer] Connecting Tone.js player to analyser...');
+      // Connect Tone.js to analyser
+      Tone.connect(this.player, this.analyser);
+      console.log('[AdvancedAnalyzer] Analyser connected successfully');
+    } catch (error) {
+      console.error('[AdvancedAnalyzer] Failed to setup analyser:', error);
+      throw error;
+    }
   }
 
   /**
