@@ -199,13 +199,37 @@ export type LaserPattern = 'beam' | 'fan' | 'tunnel' | 'wave' | 'cone';
 export type Fixture = MovingHead | Strobe | WashLight | Laser;
 
 /**
+ * All possible fixture properties that can be updated
+ */
+export interface FixtureUpdates {
+  enabled?: boolean;
+  intensity?: number;
+  color?: RGB;
+  // MovingHead specific
+  pan?: number;
+  tilt?: number;
+  beamWidth?: number;
+  gobo?: string;
+  speed?: number;
+  // Strobe specific
+  rate?: number;
+  flashDuration?: number;
+  // WashLight specific
+  spread?: number;
+  // Laser specific
+  xPosition?: number;
+  yPosition?: number;
+  pattern?: LaserPattern;
+}
+
+/**
  * Command to update fixture state
  */
 export interface LightingCommand {
-  /** Target fixture ID, or 'all' for broadcast */
-  targetId: string | 'all';
+  /** Target fixture ID, or 'all' for broadcast, or fixture type */
+  targetId: string | 'all' | FixtureType;
   /** Properties to update */
-  updates: Partial<Omit<Fixture, 'id' | 'type' | 'position'>>;
+  updates: FixtureUpdates;
   /** Transition duration in ms (0 = instant) */
   transitionMs: number;
   /** Easing function for transition */
