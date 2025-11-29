@@ -19,6 +19,8 @@ export { BeatDetector } from './BeatDetector';
 export { AdvancedAnalyzer } from './AdvancedAnalyzer';
 export type { EnhancedAudioFrame, AdvancedAnalyzerConfig } from './AdvancedAnalyzer';
 
+export { AnalysisCache } from './AnalysisCache';
+
 export { BeatGrid } from './BeatGrid';
 export type { BeatInfo } from './BeatGrid';
 

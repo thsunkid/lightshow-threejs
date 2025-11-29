@@ -15,6 +15,8 @@ import {
   EasingType,
 } from '../shared/types';
 import { RuleEvaluator } from './rules/RuleEvaluator';
+import { ShowPlanner, ShowPlan, Scene } from './ShowPlanner';
+import { VariationSelector } from './LightingVariations';
 
 // Utility functions for smoothing and color conversion
 export function lerp(a: number, b: number, t: number): number {
@@ -87,6 +89,11 @@ export class MappingEngine implements IMappingEngine {
   private baseColor: RGB = { r: 0, g: 0.5, b: 1 };
   private lastBeatNumber: number = 0;
 
+  // Show planning system
+  private showPlanner: ShowPlanner;
+  private currentPlan: ShowPlan | null = null;
+  private variationSelector: VariationSelector;
+
   constructor(config?: Partial<MappingConfig>) {
     this.config = {
       intensityScale: 1.0,
@@ -108,6 +115,10 @@ export class MappingEngine implements IMappingEngine {
     this.ruleEvaluator = new RuleEvaluator(
       this.config.styleProfile?.palette.primary || defaultPalette
     );
+
+    // Initialize show planning system
+    this.showPlanner = new ShowPlanner();
+    this.variationSelector = new VariationSelector();
   }
 
   /**
@@ -121,11 +132,16 @@ export class MappingEngine implements IMappingEngine {
     this.commandHistory.push({ timestamp: now, count: 0 });
     this.commandHistory = this.commandHistory.filter(h => now - h.timestamp < 1000);
 
+    // If we have a show plan, use intelligent planning system
+    if (this.currentPlan) {
+      commands.push(...this.processWithShowPlan(frame));
+    }
     // If we have a style profile, process rules
-    if (this.config.styleProfile) {
+    else if (this.config.styleProfile) {
       commands.push(...this.processStyleRules(frame));
-    } else {
-      // Use default mapping behavior
+    }
+    // Use default mapping behavior
+    else {
       commands.push(...this.processDefaultMapping(frame));
     }
 
@@ -134,6 +150,152 @@ export class MappingEngine implements IMappingEngine {
     this.commandHistory[this.commandHistory.length - 1].count = commands.length;
 
     return commands;
+  }
+
+  /**
+   * Process frame using show plan and variations
+   */
+  private processWithShowPlan(frame: AudioFrame): LightingCommand[] {
+    const commands: LightingCommand[] = [];
+
+    // Get current scene
+    const scene = this.showPlanner.getSceneAt(frame.timestamp / 1000);
+    if (!scene) {
+      return commands;
+    }
+
+    // Apply scene-based base state
+    commands.push(...this.applySceneBase(scene, frame));
+
+    // Add variation responses
+    commands.push(...this.applyVariations(frame, scene));
+
+    return commands;
+  }
+
+  /**
+   * Applies base scene lighting state
+   */
+  private applySceneBase(scene: Scene, frame: AudioFrame): LightingCommand[] {
+    const commands: LightingCommand[] = [];
+
+    // Set base colors from scene palette
+    const baseColor = scene.look.baseColor;
+    const accentColor = scene.look.accentColor;
+
+    // Set wash lights to base color
+    commands.push({
+      targetId: 'wash',
+      updates: {
+        color: baseColor,
+        intensity: this.getSceneIntensity(scene),
+      },
+      transitionMs: 300,
+      easing: 'easeInOut',
+    });
+
+    // Set moving heads to accent color with scene positions
+    const positions = scene.look.movingHeadPositions;
+    if (positions.length > 0) {
+      const posIndex = frame.beatNumber % positions.length;
+      const pos = positions[posIndex];
+
+      commands.push({
+        targetId: 'moving_head',
+        updates: {
+          color: accentColor,
+          pan: pos.pan,
+          tilt: pos.tilt,
+        },
+        transitionMs: 500,
+        easing: 'easeInOut',
+      });
+    }
+
+    // Strobe control based on scene
+    if (!scene.features.useStrobes) {
+      commands.push({
+        targetId: 'strobe',
+        updates: { intensity: 0 },
+        transitionMs: 200,
+        easing: 'easeOut',
+      });
+    }
+
+    return commands;
+  }
+
+  /**
+   * Gets intensity value based on scene intensity level
+   */
+  private getSceneIntensity(scene: Scene): number {
+    switch (scene.intensity) {
+      case 'low': return 0.3;
+      case 'medium': return 0.6;
+      case 'high': return 0.85;
+      case 'extreme': return 1.0;
+      default: return 0.5;
+    }
+  }
+
+  /**
+   * Applies variation responses
+   */
+  private applyVariations(frame: AudioFrame, scene: Scene): LightingCommand[] {
+    const commands: LightingCommand[] = [];
+
+    // Get beat variations
+    const beatResponses = this.variationSelector.getBeatResponse(frame, scene);
+    commands.push(...this.convertPartialCommands(beatResponses));
+
+    // Get energy variations
+    const energyResponses = this.variationSelector.getEnergyResponse(frame, scene);
+    commands.push(...this.convertPartialCommands(energyResponses));
+
+    // Get spectral variations
+    const spectralResponses = this.variationSelector.getSpectralResponse(frame, scene);
+    commands.push(...this.convertPartialCommands(spectralResponses));
+
+    // Get section variations
+    const sectionResponses = this.variationSelector.getSectionResponse(frame, scene);
+    commands.push(...this.convertPartialCommands(sectionResponses));
+
+    return commands;
+  }
+
+  /**
+   * Converts partial commands to full commands
+   */
+  private convertPartialCommands(partials: Partial<LightingCommand>[]): LightingCommand[] {
+    return partials.map(partial => ({
+      targetId: partial.targetId || 'all',
+      updates: partial.updates || {},
+      transitionMs: partial.transitionMs ?? 100,
+      easing: partial.easing || 'linear',
+    }));
+  }
+
+  /**
+   * Load a show plan
+   */
+  loadShowPlan(plan: ShowPlan): void {
+    this.currentPlan = plan;
+    this.variationSelector.reset();
+  }
+
+  /**
+   * Clear the loaded show plan
+   */
+  clearShowPlan(): void {
+    this.currentPlan = null;
+    this.variationSelector.reset();
+  }
+
+  /**
+   * Get the show planner instance
+   */
+  getShowPlanner(): ShowPlanner {
+    return this.showPlanner;
   }
 
   /**

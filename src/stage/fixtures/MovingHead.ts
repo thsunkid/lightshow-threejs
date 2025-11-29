@@ -132,7 +132,7 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
   private createBeam(): void {
     const beamLength = 25;
     const beamGeometry = new THREE.ConeGeometry(
-      3, // radius at far end - wider for more dramatic effect
+      1.8, // radius at far end - tighter beam
       beamLength, // length
       64, // radial segments - more for smoother appearance
       1, // height segments
@@ -144,7 +144,7 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
         color: { value: new THREE.Color(1, 1, 1) },
         intensity: { value: 1.0 },
         beamWidth: { value: 0.2 },
-        opacity: { value: 0.3 },
+        opacity: { value: 0.55 },
       },
       vertexShader: `
         varying vec3 vPosition;
@@ -218,7 +218,7 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
     // Update light color and intensity
     const color = this.rgbToColor(this.state.color);
     this.spotlight.color = color;
-    this.spotlight.intensity = this.state.intensity * 100;
+    this.spotlight.intensity = this.state.intensity * 200; // Increased for more dramatic lighting
 
     // Update beam width (spotlight angle)
     const minAngle = Math.PI / 32;
@@ -231,7 +231,7 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
       uniforms.color.value = color;
       uniforms.intensity.value = this.state.intensity;
       uniforms.beamWidth.value = this.state.beamWidth;
-      uniforms.opacity.value = this.state.enabled ? 0.3 * this.state.intensity : 0;
+      uniforms.opacity.value = this.state.enabled ? 0.55 * this.state.intensity : 0;
     }
 
     // Update visibility

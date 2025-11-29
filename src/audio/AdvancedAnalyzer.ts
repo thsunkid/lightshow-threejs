@@ -76,6 +76,7 @@ export class AdvancedAnalyzer {
   private isPlaying: boolean = false;
   private startTime: number = 0;
   private pauseTime: number = 0;
+  private audioMimeType: string = 'audio/mpeg';
 
   // Event callbacks
   private beatCallbacks: Set<(beatNumber: number, isDownbeat: boolean) => void> = new Set();
@@ -101,36 +102,78 @@ export class AdvancedAnalyzer {
   /**
    * Load and pre-analyze audio file
    * @param file - File object or URL string
+   * @param onProgress - Optional callback for progress updates
    * @returns Pre-analysis results
    */
-  async loadAndAnalyze(file: File | string): Promise<PreAnalysisResult> {
+  async loadAndAnalyze(
+    file: File | string,
+    onProgress?: (stage: string, progress: number) => void
+  ): Promise<PreAnalysisResult> {
+    console.log('[AdvancedAnalyzer] Starting loadAndAnalyze...');
+
     // Stop any current playback
     this.stop();
 
     // Load the audio
+    onProgress?.('decoding', 0);
     let arrayBuffer: ArrayBuffer;
+    let mimeType = 'audio/mpeg'; // Default for MP3
 
     if (typeof file === 'string') {
+      console.log('[AdvancedAnalyzer] Loading from URL:', file);
       const response = await fetch(file);
+      mimeType = response.headers.get('content-type') || 'audio/mpeg';
       arrayBuffer = await response.arrayBuffer();
     } else {
+      // Get MIME type from file
+      console.log('[AdvancedAnalyzer] Loading from File:', file.name, 'type:', file.type, 'size:', file.size);
+      mimeType = file.type || 'audio/mpeg';
       arrayBuffer = await file.arrayBuffer();
     }
 
+    console.log('[AdvancedAnalyzer] ArrayBuffer size:', arrayBuffer.byteLength, 'MIME type:', mimeType);
+
+    // Store for later use in setupPlayer
+    this.audioMimeType = mimeType;
+
     // Decode audio data
-    this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer.slice(0));
+    console.log('[AdvancedAnalyzer] Decoding audio data...');
+    onProgress?.('decoding', 10);
+    try {
+      this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer.slice(0));
+      console.log('[AdvancedAnalyzer] Audio decoded successfully. Duration:', this.audioBuffer.duration, 'seconds');
+    } catch (decodeError) {
+      console.error('[AdvancedAnalyzer] Failed to decode audio:', decodeError);
+      throw decodeError;
+    }
+    onProgress?.('decoding', 20);
 
     // Perform BPM analysis
+    console.log('[AdvancedAnalyzer] Starting BPM analysis...');
+    onProgress?.('bpm', 20);
     const bpm = await this.analyzeBPM();
+    console.log('[AdvancedAnalyzer] BPM analysis complete:', bpm);
+    onProgress?.('bpm', 40);
 
     // Generate beat grid
+    console.log('[AdvancedAnalyzer] Generating beat grid...');
+    onProgress?.('beats', 40);
     const { beats, downbeats } = this.generateBeatGrid(bpm);
+    console.log('[AdvancedAnalyzer] Beat grid generated:', beats.length, 'beats,', downbeats.length, 'downbeats');
+    onProgress?.('beats', 60);
 
     // Detect sections
+    console.log('[AdvancedAnalyzer] Detecting sections...');
+    onProgress?.('sections', 60);
     const sections = await this.detectSections();
+    console.log('[AdvancedAnalyzer] Sections detected:', sections.length, 'sections');
+    onProgress?.('sections', 80);
 
     // Calculate average energy
+    console.log('[AdvancedAnalyzer] Calculating average energy...');
+    onProgress?.('finalizing', 80);
     const averageEnergy = this.calculateAverageEnergy();
+    console.log('[AdvancedAnalyzer] Average energy:', averageEnergy);
 
     // Store pre-analysis results
     this.preAnalysis = {
@@ -141,23 +184,36 @@ export class AdvancedAnalyzer {
       averageEnergy,
       keySignature: undefined // TODO: Implement key detection
     };
+    console.log('[AdvancedAnalyzer] Pre-analysis results stored');
 
     // Create beat grid
     this.beatGrid = new BeatGrid(bpm, beats, downbeats);
+    console.log('[AdvancedAnalyzer] BeatGrid created');
 
     // Create cue scheduler
     this.cueScheduler = new CueScheduler(this.beatGrid);
+    console.log('[AdvancedAnalyzer] CueScheduler created');
 
     // Generate automatic cues if enabled
     if (this.config.enableCueGeneration) {
       this.cueScheduler.generateCuesFromAnalysis(this.preAnalysis);
+      console.log('[AdvancedAnalyzer] Cues generated from analysis');
     }
 
+    onProgress?.('finalizing', 90);
+
     // Setup Tone.js player
+    console.log('[AdvancedAnalyzer] Setting up Tone.js player...');
     await this.setupPlayer(arrayBuffer);
+    console.log('[AdvancedAnalyzer] Tone.js player setup complete');
 
     // Setup real-time analyzer
+    console.log('[AdvancedAnalyzer] Setting up real-time analyser...');
     this.setupAnalyser();
+    console.log('[AdvancedAnalyzer] Real-time analyser setup complete');
+
+    onProgress?.('finalizing', 100);
+    console.log('[AdvancedAnalyzer] loadAndAnalyze complete!');
 
     return this.preAnalysis;
   }
@@ -326,13 +382,20 @@ export class AdvancedAnalyzer {
    * @param arrayBuffer - Audio data
    */
   private async setupPlayer(arrayBuffer: ArrayBuffer): Promise<void> {
-    // Create a blob URL for Tone.js
-    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+    // Create a blob URL for Tone.js with correct MIME type
+    console.log('Setting up Tone.js player with MIME type:', this.audioMimeType);
+    const blob = new Blob([arrayBuffer], { type: this.audioMimeType });
     const url = URL.createObjectURL(blob);
 
-    // Create Tone.js player
-    this.player = new Tone.Player(url).toDestination();
-    await this.player.load(url);
+    try {
+      // Create Tone.js player
+      this.player = new Tone.Player(url).toDestination();
+      await this.player.load(url);
+      console.log('Tone.js player loaded successfully');
+    } catch (error) {
+      console.error('Failed to setup Tone.js player:', error);
+      throw error;
+    }
   }
 
   /**

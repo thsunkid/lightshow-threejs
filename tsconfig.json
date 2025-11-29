@@ -10,6 +10,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "strict": true,
+    "types": ["vite/client"],
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,

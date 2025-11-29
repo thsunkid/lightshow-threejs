@@ -276,10 +276,93 @@
       #controls {
         display: none;
       }
+
+      /* Loading overlay */
+      #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(26, 26, 26, 0.95);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        transition: opacity 0.3s ease;
+      }
+
+      #loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .loading-content {
+        text-align: center;
+        max-width: 400px;
+        padding: 40px;
+      }
+
+      .loading-spinner {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 30px;
+        border: 4px solid rgba(29, 185, 84, 0.2);
+        border-top-color: #1db954;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      #loading-stage {
+        font-size: 18px;
+        font-weight: 500;
+        color: #fff;
+        margin-bottom: 20px;
+        text-transform: capitalize;
+      }
+
+      .loading-progress-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 15px;
+      }
+
+      #loading-progress {
+        height: 100%;
+        background: linear-gradient(90deg, #1db954, #1ed760);
+        border-radius: 4px;
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+
+      #loading-percent {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.7);
+        font-variant-numeric: tabular-nums;
+      }
     </style>
   </head>
   <body>
     <div id="canvas-container"></div>
+
+    <div id="loading-overlay" class="hidden">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div id="loading-stage">Analyzing audio...</div>
+        <div class="loading-progress-bar">
+          <div id="loading-progress" style="width: 0%"></div>
+        </div>
+        <div id="loading-percent">0%</div>
+      </div>
+    </div>
 
     <div id="drop-zone">
       <h2>Drop an audio file</h2>

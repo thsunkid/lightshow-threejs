@@ -9,12 +9,13 @@
  */
 
 // Import from each workstream
-import { AudioAnalyzer } from '@audio/AudioAnalyzer';
+import { AdvancedAnalyzer, EnhancedAudioFrame } from '@audio/AdvancedAnalyzer';
+import { AnalysisCache } from '@audio/AnalysisCache';
 import { Stage } from '@stage/Stage';
 // import { StyleLearner } from '@style/StyleLearner';
 import { MappingEngine } from '@mapping/MappingEngine';
 
-import type { AudioFrame, LightingCommand } from '@shared/types';
+import type { LightingCommand } from '@shared/types';
 
 console.log('Lightshow Generator initializing...');
 
@@ -33,13 +34,14 @@ interface TrackMetadata {
  * Main application class
  */
 class LightshowApp {
-  private audioAnalyzer: AudioAnalyzer | null = null;
+  private advancedAnalyzer: AdvancedAnalyzer | null = null;
+  private analysisCache: AnalysisCache;
   private stage!: Stage;
   private mappingEngine!: MappingEngine;
   private isPlaying = false;
   private progressInterval: number | null = null;
   private isDragging = false;
-  private unsubscribeFrame: (() => void) | null = null;
+  private animationFrameId: number | null = null;
 
   // UI Elements
   private playPauseBtn!: HTMLButtonElement;
@@ -56,8 +58,13 @@ class LightshowApp {
   private volumeBar!: HTMLElement;
   private volumeSlider!: HTMLElement;
   private dropZone!: HTMLElement;
+  private loadingOverlay!: HTMLElement;
+  private loadingStage!: HTMLElement;
+  private loadingProgress!: HTMLElement;
+  private loadingPercent!: HTMLElement;
 
   constructor() {
+    this.analysisCache = new AnalysisCache();
     this.setupStage();
     this.setupMappingEngine();
     this.setupUI();
@@ -112,6 +119,10 @@ class LightshowApp {
     this.volumeBar = document.getElementById('volume-bar')!;
     this.volumeSlider = document.getElementById('volume-slider')!;
     this.dropZone = document.getElementById('drop-zone')!;
+    this.loadingOverlay = document.getElementById('loading-overlay')!;
+    this.loadingStage = document.getElementById('loading-stage')!;
+    this.loadingProgress = document.getElementById('loading-progress')!;
+    this.loadingPercent = document.getElementById('loading-percent')!;
 
     // Setup button handlers
     this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
@@ -220,73 +231,60 @@ class LightshowApp {
 
     // Extract metadata first
     const metadata = await this.extractMetadata(file);
-    console.log('Metadata extracted:', metadata);
 
     // Update UI with metadata
     this.updateTrackInfo(metadata);
 
-    // Hide drop zone
+    // Hide drop zone, show loading overlay
     this.dropZone.classList.add('hidden');
+    this.showLoadingOverlay();
 
     try {
-      // Initialize AudioAnalyzer if not already created
-      if (!this.audioAnalyzer) {
-        this.audioAnalyzer = new AudioAnalyzer({
+      // Initialize AdvancedAnalyzer if not already created
+      if (!this.advancedAnalyzer) {
+        this.advancedAnalyzer = new AdvancedAnalyzer({
           fftSize: 2048,
-          smoothingTimeConstant: 0.8,
-          minTempo: 60,
-          maxTempo: 200,
-          detectBeats: true,
-          detectSections: true,
+          enableCueGeneration: true,
         });
       }
 
-      // Load the audio file
-      await this.audioAnalyzer.loadFile(file);
-      console.log(`Audio file loaded successfully: ${file.name}`);
+      // Check cache first
+      console.log('Checking analysis cache...');
+      let preAnalysis = await this.analysisCache.get(file);
 
-      // Update duration once loaded
-      const duration = this.audioAnalyzer.getDuration();
-      this.totalTimeEl.textContent = this.formatTime(duration / 1000);
+      if (preAnalysis) {
+        console.log('Using cached analysis!');
+        // Load audio without analysis (just for playback)
+        await this.advancedAnalyzer.loadAndAnalyze(file, (stage, progress) => {
+          this.updateLoadingProgress(stage, progress);
+        });
+      } else {
+        console.log('No cache found, performing full analysis...');
+        // Perform full analysis with progress updates
+        preAnalysis = await this.advancedAnalyzer.loadAndAnalyze(file, (stage, progress) => {
+          this.updateLoadingProgress(stage, progress);
+        });
 
-      // Unsubscribe from previous frame callback if any
-      if (this.unsubscribeFrame) {
-        this.unsubscribeFrame();
-        this.unsubscribeFrame = null;
+        // Cache the results
+        console.log('Saving analysis to cache...');
+        await this.analysisCache.set(file, preAnalysis);
       }
 
-      // Set up frame callback to process audio and drive lights
-      let frameCount = 0;
-      this.unsubscribeFrame = this.audioAnalyzer.onFrame((frame: AudioFrame) => {
-        frameCount++;
-
-        // Debug: Log every 60th frame (~1 per second at 60fps)
-        if (frameCount % 60 === 0) {
-          console.log('Audio Frame:', {
-            rms: frame.rms.toFixed(3),
-            energy: frame.energy.toFixed(3),
-            isBeat: frame.isBeat,
-            lowEnergy: frame.lowEnergy.toFixed(3),
-            spectralCentroid: frame.spectralCentroid.toFixed(3),
-          });
-        }
-
-        // Process audio frame through mapping engine
-        const commands: LightingCommand[] = this.mappingEngine.process(frame);
-
-        // Debug: Log commands on beats
-        if (frame.isBeat && commands.length > 0) {
-          console.log(`BEAT! Generated ${commands.length} commands`);
-        }
-
-        // Execute commands on stage
-        if (commands.length > 0) {
-          this.stage.executeCommands(commands);
-        }
-
-        // Update flake lights based on audio
-        this.stage.updateFlakeLights(frame);
+      console.log('Pre-analysis complete:', {
+        bpm: preAnalysis.bpm,
+        beats: preAnalysis.beats.length,
+        sections: preAnalysis.sections.length
       });
+
+      // Update duration
+      const duration = this.advancedAnalyzer.getPreAnalysis()?.beats[preAnalysis.beats.length - 1] || 0;
+      this.totalTimeEl.textContent = this.formatTime(duration);
+
+      // Hide loading overlay
+      this.hideLoadingOverlay();
+
+      // Start animation loop for frame updates
+      this.startAnimationLoop();
 
       // Update display
       this.updateProgress();
@@ -295,6 +293,133 @@ class LightshowApp {
       console.error('Failed to load audio file:', error);
       alert('Failed to load audio file. Please try another file.');
       this.dropZone.classList.remove('hidden');
+      this.hideLoadingOverlay();
+    }
+  }
+
+  /**
+   * Show loading overlay
+   */
+  private showLoadingOverlay(): void {
+    this.loadingOverlay.classList.remove('hidden');
+    this.updateLoadingProgress('loading', 0);
+  }
+
+  /**
+   * Hide loading overlay
+   */
+  private hideLoadingOverlay(): void {
+    this.loadingOverlay.classList.add('hidden');
+  }
+
+  /**
+   * Update loading progress
+   */
+  private updateLoadingProgress(stage: string, progress: number): void {
+    // Map stage names to user-friendly text
+    const stageNames: Record<string, string> = {
+      'decoding': 'Decoding audio',
+      'bpm': 'Detecting tempo',
+      'beats': 'Analyzing beats',
+      'sections': 'Detecting sections',
+      'finalizing': 'Finalizing',
+      'loading': 'Loading'
+    };
+
+    this.loadingStage.textContent = stageNames[stage] || 'Analyzing audio';
+    this.loadingProgress.style.width = `${progress}%`;
+    this.loadingPercent.textContent = `${Math.round(progress)}%`;
+  }
+
+  /**
+   * Start animation loop for frame updates
+   */
+  private startAnimationLoop(): void {
+    if (!this.advancedAnalyzer) return;
+
+    let frameCount = 0;
+    const updateFrame = () => {
+      if (!this.advancedAnalyzer || !this.advancedAnalyzer.getIsPlaying()) {
+        return;
+      }
+
+      frameCount++;
+
+      // Get enhanced audio frame
+      const frame: EnhancedAudioFrame = this.advancedAnalyzer.getCurrentFrame();
+
+      // Debug: Log every 60th frame (~1 per second at 60fps)
+      if (frameCount % 60 === 0) {
+        console.log('Enhanced Audio Frame:', {
+          rms: frame.rms.toFixed(3),
+          energy: frame.energy.toFixed(3),
+          isBeat: frame.isBeat,
+          isDownbeat: frame.isDownbeat,
+          beatNumber: frame.beatNumber,
+          tempo: frame.tempo,
+          bass: frame.bass.toFixed(3),
+          mid: frame.mid.toFixed(3),
+          high: frame.high.toFixed(3),
+          section: frame.section?.type,
+          cues: frame.cues.length
+        });
+      }
+
+      // Convert EnhancedAudioFrame to AudioFrame for mapping engine
+      // (Mapping engine expects the old AudioFrame format)
+      const legacyFrame = {
+        timestamp: frame.timestamp,
+        isBeat: frame.isBeat,
+        isDownbeat: frame.isDownbeat,
+        tempo: frame.tempo,
+        beatPhase: frame.beatPhase,
+        beatNumber: frame.beatNumber,
+        rms: frame.rms,
+        energy: frame.energy,
+        peak: frame.peak,
+        spectralCentroid: frame.spectralCentroid,
+        spectralFlux: frame.spectralFlux,
+        lowEnergy: frame.bass,
+        midEnergy: frame.mid,
+        highEnergy: frame.high,
+        section: frame.section?.type || 'verse',
+        sectionConfidence: 0.8
+      };
+
+      // Process audio frame through mapping engine
+      const commands: LightingCommand[] = this.mappingEngine.process(legacyFrame as any);
+
+      // Debug: Log commands on beats
+      if (frame.isBeat && commands.length > 0) {
+        console.log(`BEAT ${frame.beatNumber}! Generated ${commands.length} commands`);
+      }
+
+      // Debug: Log cues
+      if (frame.cues.length > 0) {
+        console.log(`Firing ${frame.cues.length} cues:`, frame.cues.map(c => c.action));
+      }
+
+      // Execute commands on stage
+      if (commands.length > 0) {
+        this.stage.executeCommands(commands);
+      }
+
+      // Update flake lights based on audio
+      this.stage.updateFlakeLights(legacyFrame as any);
+
+      this.animationFrameId = requestAnimationFrame(updateFrame);
+    };
+
+    updateFrame();
+  }
+
+  /**
+   * Stop animation loop
+   */
+  private stopAnimationLoop(): void {
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
   }
 
@@ -328,10 +453,13 @@ class LightshowApp {
    * Update progress display (called once to set initial state)
    */
   private updateProgress(): void {
-    if (!this.audioAnalyzer) return;
+    if (!this.advancedAnalyzer) return;
 
-    const currentTime = this.audioAnalyzer.getCurrentTime() / 1000;
-    const duration = this.audioAnalyzer.getDuration() / 1000;
+    const preAnalysis = this.advancedAnalyzer.getPreAnalysis();
+    if (!preAnalysis) return;
+
+    const currentTime = 0; // Start at 0
+    const duration = preAnalysis.beats[preAnalysis.beats.length - 1];
 
     this.updateProgressUI(currentTime, duration);
   }
@@ -345,10 +473,14 @@ class LightshowApp {
 
     // Update every 50ms for smooth progress
     this.progressInterval = window.setInterval(() => {
-      if (!this.audioAnalyzer || this.isDragging) return;
+      if (!this.advancedAnalyzer || this.isDragging) return;
 
-      const currentTime = this.audioAnalyzer.getCurrentTime() / 1000;
-      const duration = this.audioAnalyzer.getDuration() / 1000;
+      const preAnalysis = this.advancedAnalyzer.getPreAnalysis();
+      if (!preAnalysis) return;
+
+      const currentFrame = this.advancedAnalyzer.getCurrentFrame();
+      const currentTime = currentFrame.timestamp / 1000;
+      const duration = preAnalysis.beats[preAnalysis.beats.length - 1];
 
       this.updateProgressUI(currentTime, duration);
     }, 50);
@@ -384,14 +516,17 @@ class LightshowApp {
    * Handle progress bar click to seek
    */
   private handleProgressClick(e: MouseEvent): void {
-    if (!this.audioAnalyzer) return;
+    if (!this.advancedAnalyzer) return;
+
+    const preAnalysis = this.advancedAnalyzer.getPreAnalysis();
+    if (!preAnalysis) return;
 
     const rect = this.progressBg.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
-    const duration = this.audioAnalyzer.getDuration();
+    const duration = preAnalysis.beats[preAnalysis.beats.length - 1];
     const seekTime = percent * duration;
 
-    this.audioAnalyzer.seek(seekTime);
+    this.advancedAnalyzer.seek(seekTime);
     this.updateProgress();
   }
 
@@ -399,7 +534,10 @@ class LightshowApp {
    * Handle dragging on progress bar
    */
   private startDrag(_e: MouseEvent): void {
-    if (!this.audioAnalyzer) return;
+    if (!this.advancedAnalyzer) return;
+
+    const preAnalysis = this.advancedAnalyzer.getPreAnalysis();
+    if (!preAnalysis) return;
 
     this.isDragging = true;
 
@@ -414,7 +552,7 @@ class LightshowApp {
       this.progressHandle.style.left = `${percent * 100}%`;
 
       // Update time display
-      const duration = this.audioAnalyzer!.getDuration() / 1000;
+      const duration = preAnalysis!.beats[preAnalysis!.beats.length - 1];
       this.currentTimeEl.textContent = this.formatTime(percent * duration);
     };
 
@@ -425,10 +563,10 @@ class LightshowApp {
       // Perform the actual seek
       const rect = this.progressBg.getBoundingClientRect();
       const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const duration = this.audioAnalyzer!.getDuration();
+      const duration = preAnalysis!.beats[preAnalysis!.beats.length - 1];
       const seekTime = percent * duration;
 
-      this.audioAnalyzer!.seek(seekTime);
+      this.advancedAnalyzer!.seek(seekTime);
 
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -466,7 +604,7 @@ class LightshowApp {
   }
 
   private async play(): Promise<void> {
-    if (!this.audioAnalyzer) {
+    if (!this.advancedAnalyzer) {
       console.warn('No audio loaded. Please load an audio file first.');
       return;
     }
@@ -476,25 +614,31 @@ class LightshowApp {
     this.isPlaying = true;
     this.playPauseBtn.innerHTML = '❚❚';
 
-    // Start audio playback (async to resume AudioContext if needed)
-    await this.audioAnalyzer.play();
+    // Start audio playback
+    this.advancedAnalyzer.play();
 
     // Start continuous progress updates
     this.startProgressUpdates();
+
+    // Start animation loop
+    this.startAnimationLoop();
   }
 
   private pause(): void {
-    if (!this.audioAnalyzer) return;
+    if (!this.advancedAnalyzer) return;
 
     this.isPlaying = false;
     this.playPauseBtn.innerHTML = '▶';
     console.log('Paused');
 
     // Pause audio
-    this.audioAnalyzer.pause();
+    this.advancedAnalyzer.pause();
 
     // Stop progress updates
     this.stopProgressUpdates();
+
+    // Stop animation loop
+    this.stopAnimationLoop();
 
     // Update progress one more time to show paused position
     this.updateProgress();
@@ -502,17 +646,20 @@ class LightshowApp {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private stop(): void {
-    if (!this.audioAnalyzer) return;
+    if (!this.advancedAnalyzer) return;
 
     this.isPlaying = false;
     this.playPauseBtn.innerHTML = '▶';
     console.log('Stopped');
 
     // Stop audio and reset
-    this.audioAnalyzer.stop();
+    this.advancedAnalyzer.stop();
 
     // Stop progress updates
     this.stopProgressUpdates();
+
+    // Stop animation loop
+    this.stopAnimationLoop();
 
     // Update time display to show reset
     this.updateProgress();
@@ -535,8 +682,8 @@ class LightshowApp {
   private previous(): void {
     console.log('Previous track - not implemented');
     // Could restart current track or load previous from playlist
-    if (this.audioAnalyzer) {
-      this.audioAnalyzer.seek(0);
+    if (this.advancedAnalyzer) {
+      this.advancedAnalyzer.seek(0);
       this.updateProgress();
     }
   }

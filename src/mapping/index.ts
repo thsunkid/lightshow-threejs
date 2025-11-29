@@ -5,6 +5,8 @@
  * - Mapping audio features to lighting commands
  * - Applying style profiles
  * - Rule evaluation and action generation
+ * - Intelligent show planning
+ * - Lighting variations and responses
  */
 
 export { MappingEngine } from './MappingEngine';
@@ -17,3 +19,19 @@ export {
   mergeRuleSets,
   DEFAULT_PALETTES
 } from './rules/DefaultRules';
+export {
+  ShowPlanner,
+  type ShowPlan,
+  type Scene,
+  type LightingLook,
+  type Transition,
+  type LightingTheme,
+} from './ShowPlanner';
+export {
+  VariationSelector,
+  type LightingVariation,
+  BEAT_VARIATIONS,
+  ENERGY_VARIATIONS,
+  SPECTRAL_VARIATIONS,
+  SECTION_VARIATIONS,
+} from './LightingVariations';
