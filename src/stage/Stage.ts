@@ -7,6 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import {
   StageConfig,
@@ -15,6 +16,7 @@ import {
   AudioFrame,
 } from '../shared/types';
 import { LightingController } from './LightingController';
+import { LEDParticlePanel } from './LEDParticlePanel';
 
 /**
  * Main stage class managing the 3D scene
@@ -31,8 +33,9 @@ export class Stage {
   private clock: THREE.Clock;
   private gui?: GUI;
   private animationId?: number;
-  private cameraPreset: 'front' | 'side' | 'top' | 'dynamic' = 'front';
+  private cameraPreset: 'front' | 'side' | 'top' | 'dynamic' | 'free' = 'front';
   private dynamicCameraTime: number = 0;
+  private controls!: OrbitControls;
 
   // Flake lights system
   private flakeLightsGroup!: THREE.Group;
@@ -45,6 +48,9 @@ export class Stage {
   private flakePointsCool!: THREE.Points;
   private flakeLightsTime: number = 0;
   private readonly FLAKE_COUNT = 150; // Per color type
+
+  // LED Particle Panel system
+  private ledParticlePanel?: LEDParticlePanel;
 
   // Default configuration
   private static readonly DEFAULT_CONFIG: StageConfig = {
@@ -73,6 +79,7 @@ export class Stage {
     this.setupScene();
     this.setupCamera();
     this.setupRenderer();
+    this.setupOrbitControls();
     this.setupPostProcessing();
     this.setupLighting();
     this.createStageGeometry();
@@ -142,6 +149,41 @@ export class Stage {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.5;
     this.container.appendChild(this.renderer.domElement);
+  }
+
+  /**
+   * Sets up OrbitControls for mouse-based camera navigation
+   */
+  private setupOrbitControls(): void {
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+
+    // Set the target point (what the camera looks at)
+    this.controls.target.set(0, 3, -2);
+
+    // Enable damping for smooth camera movement
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.05;
+
+    // Limit zoom range
+    this.controls.minDistance = 5;
+    this.controls.maxDistance = 100;
+
+    // Limit vertical rotation to prevent going underground
+    this.controls.maxPolarAngle = Math.PI * 0.85; // Slightly below horizontal
+    this.controls.minPolarAngle = Math.PI * 0.1;  // Prevent looking straight down
+
+    // Enable pan with right click
+    this.controls.enablePan = true;
+    this.controls.panSpeed = 0.5;
+
+    // When user interacts with controls, switch to 'free' mode
+    this.controls.addEventListener('start', () => {
+      if (this.cameraPreset !== 'free') {
+        this.cameraPreset = 'free';
+      }
+    });
+
+    this.controls.update();
   }
 
   /**
@@ -394,6 +436,20 @@ export class Stage {
 
     // Screen frame
     this.createScreenFrame(screen.position);
+
+    // Create LED particle panel
+    this.ledParticlePanel = new LEDParticlePanel({
+      width: this.config.width * 0.8,
+      height: this.config.trussHeight * 0.7,
+      particleCount: 3000,
+      baseColor: new THREE.Color(0x001030),
+      accentColor: new THREE.Color(0x4080ff),
+    });
+
+    const panelMesh = this.ledParticlePanel.getMesh();
+    panelMesh.position.copy(screen.position);
+    panelMesh.position.z += 0.2; // Slightly in front of screen
+    this.stageGroup.add(panelMesh);
   }
 
   /**
@@ -916,10 +972,16 @@ export class Stage {
 
     // Camera presets
     const cameraFolder = this.gui.addFolder('Camera');
-    cameraFolder.add(this, 'cameraPreset', ['front', 'side', 'top', 'dynamic'])
+    cameraFolder.add(this, 'cameraPreset', ['front', 'side', 'top', 'dynamic', 'free'])
       .onChange((value: string) => {
         this.setCameraPreset(value as any);
-      });
+      })
+      .name('View Preset');
+
+    // Add hint about mouse controls
+    cameraFolder.add({ hint: 'Use mouse to orbit (drag), pan (right-drag), zoom (scroll)' }, 'hint')
+      .name('Controls')
+      .disable();
 
     // Lighting controls
     const lightingFolder = this.gui.addFolder('Lighting Controls');
@@ -1016,8 +1078,25 @@ export class Stage {
       this.updateDynamicCamera(deltaTime);
     }
 
+    // Update orbit controls (for damping effect)
+    if (this.controls && this.cameraPreset !== 'dynamic') {
+      this.controls.update();
+    }
+
     // Update flake lights animation
     this.updateFlakeLightsAnimation(deltaTime);
+  }
+
+  /**
+   * Updates LED particle panel with audio frame data
+   * @param frame Audio frame data
+   */
+  updateLEDPanel(frame: AudioFrame): void {
+    if (this.ledParticlePanel) {
+      // Convert deltaTime from milliseconds to seconds
+      const deltaTime = this.clock.getDelta();
+      this.ledParticlePanel.update(frame, deltaTime);
+    }
   }
 
   /**
@@ -1101,31 +1180,52 @@ export class Stage {
    * Sets camera preset
    * @param preset Camera preset name
    */
-  setCameraPreset(preset: 'front' | 'side' | 'top' | 'dynamic'): void {
+  setCameraPreset(preset: 'front' | 'side' | 'top' | 'dynamic' | 'free'): void {
     this.cameraPreset = preset;
     this.dynamicCameraTime = 0;
+
+    // Disable controls during dynamic camera mode
+    if (this.controls) {
+      this.controls.enabled = preset !== 'dynamic';
+    }
+
+    // Don't change position for 'free' mode (user is controlling)
+    if (preset === 'free') {
+      return;
+    }
+
+    let target = new THREE.Vector3(0, 3, -2);
 
     switch (preset) {
       case 'front':
         // Dramatic front view showing full stage
         this.camera.position.set(0, 7, 25);
-        this.camera.lookAt(0, 3, -2);
+        target.set(0, 3, -2);
         break;
       case 'side':
         // Side angle showing depth
         this.camera.position.set(30, 10, 5);
-        this.camera.lookAt(0, 3, 0);
+        target.set(0, 3, 0);
         break;
       case 'top':
         // Overhead view for full layout
         this.camera.position.set(0, 35, 8);
-        this.camera.lookAt(0, 0, 0);
+        target.set(0, 0, 0);
         break;
       case 'dynamic':
         // Initial position for animated camera
         this.camera.position.set(25, 10, 20);
-        this.camera.lookAt(0, 3, 0);
+        target.set(0, 3, 0);
         break;
+    }
+
+    // Update camera look direction
+    this.camera.lookAt(target);
+
+    // Sync OrbitControls target with camera preset
+    if (this.controls) {
+      this.controls.target.copy(target);
+      this.controls.update();
     }
   }
 
@@ -1215,6 +1315,11 @@ export class Stage {
     }
     if (this.flakeLightsGroup) {
       this.scene.remove(this.flakeLightsGroup);
+    }
+
+    // Dispose orbit controls
+    if (this.controls) {
+      this.controls.dispose();
     }
 
     // Dispose GUI
