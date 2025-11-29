@@ -134,12 +134,15 @@ export class FeatureExtractor {
         'spectralCentroid'
       ]) as any;
 
-      rms = features.rms || 0;
-      energy = features.energy || 0;
+      // Check if features is null (can happen before audio data is ready)
+      if (features) {
+        rms = features.rms || 0;
+        energy = features.energy || 0;
 
-      // Normalize spectral centroid (typically in Hz, normalize to 0-1)
-      const rawCentroid = features.spectralCentroid || 0;
-      spectralCentroid = Math.min(1, rawCentroid / (this.config.sampleRate / 2));
+        // Normalize spectral centroid (typically in Hz, normalize to 0-1)
+        const rawCentroid = features.spectralCentroid || 0;
+        spectralCentroid = Math.min(1, rawCentroid / (this.config.sampleRate / 2));
+      }
     }
 
     // Calculate spectral flux (difference from previous spectrum)

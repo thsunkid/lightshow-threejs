@@ -12,6 +12,7 @@ import {
   StageConfig,
   Fixture,
   LightingCommand,
+  AudioFrame,
 } from '../shared/types';
 import { LightingController } from './LightingController';
 
@@ -32,6 +33,18 @@ export class Stage {
   private animationId?: number;
   private cameraPreset: 'front' | 'side' | 'top' | 'dynamic' = 'front';
   private dynamicCameraTime: number = 0;
+
+  // Flake lights system
+  private flakeLightsGroup!: THREE.Group;
+  private flakePositions!: Float32Array;
+  private flakeVelocities!: Float32Array;
+  private flakeColors!: Float32Array;
+  private flakeIntensities!: Float32Array;
+  private flakePhases!: Float32Array;
+  private flakePointsWarm!: THREE.Points;
+  private flakePointsCool!: THREE.Points;
+  private flakeLightsTime: number = 0;
+  private readonly FLAKE_COUNT = 150; // Per color type
 
   // Default configuration
   private static readonly DEFAULT_CONFIG: StageConfig = {
@@ -63,6 +76,7 @@ export class Stage {
     this.setupPostProcessing();
     this.setupLighting();
     this.createStageGeometry();
+    this.createFlakeLights();
     this.setupLightingController();
     this.setupEventListeners();
     this.setupDebugGUI();
@@ -517,6 +531,173 @@ export class Stage {
   }
 
   /**
+   * Creates flake-like scattered lights for atmospheric effect
+   * Two colors: warm yellow and cool white-blue
+   */
+  private createFlakeLights(): void {
+    this.flakeLightsGroup = new THREE.Group();
+    this.flakeLightsGroup.name = 'FlakeLights';
+
+    const totalFlakes = this.FLAKE_COUNT * 2; // Both colors
+
+    // Initialize arrays for animation data
+    this.flakePositions = new Float32Array(totalFlakes * 3);
+    this.flakeVelocities = new Float32Array(totalFlakes * 3);
+    this.flakeColors = new Float32Array(totalFlakes * 3);
+    this.flakeIntensities = new Float32Array(totalFlakes);
+    this.flakePhases = new Float32Array(totalFlakes);
+
+    // Warm yellow color (slightly golden)
+    const warmColor = new THREE.Color(1.0, 0.85, 0.4);
+    // Cool white-blue color
+    const coolColor = new THREE.Color(0.7, 0.85, 1.0);
+
+    // Stage bounds for distributing flakes
+    const stageWidth = this.config.width * 1.5;
+    const stageDepth = this.config.depth * 2;
+    const maxHeight = this.config.trussHeight * 1.3;
+
+    // Create warm flakes
+    const warmGeometry = new THREE.BufferGeometry();
+    const warmPositions = new Float32Array(this.FLAKE_COUNT * 3);
+    const warmSizes = new Float32Array(this.FLAKE_COUNT);
+
+    for (let i = 0; i < this.FLAKE_COUNT; i++) {
+      // Distribute across stage area with some clustering near truss
+      const x = (Math.random() - 0.5) * stageWidth;
+      const y = Math.random() * maxHeight + 1;
+      const z = (Math.random() - 0.5) * stageDepth - 2;
+
+      warmPositions[i * 3] = x;
+      warmPositions[i * 3 + 1] = y;
+      warmPositions[i * 3 + 2] = z;
+
+      // Store in master arrays
+      this.flakePositions[i * 3] = x;
+      this.flakePositions[i * 3 + 1] = y;
+      this.flakePositions[i * 3 + 2] = z;
+
+      // Random velocities for subtle movement
+      this.flakeVelocities[i * 3] = (Math.random() - 0.5) * 0.02;
+      this.flakeVelocities[i * 3 + 1] = (Math.random() - 0.5) * 0.01;
+      this.flakeVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+
+      // Colors
+      this.flakeColors[i * 3] = warmColor.r;
+      this.flakeColors[i * 3 + 1] = warmColor.g;
+      this.flakeColors[i * 3 + 2] = warmColor.b;
+
+      // Random initial intensity and phase for twinkling
+      this.flakeIntensities[i] = Math.random() * 0.5 + 0.3;
+      this.flakePhases[i] = Math.random() * Math.PI * 2;
+
+      // Varied sizes for depth perception
+      warmSizes[i] = Math.random() * 0.15 + 0.05;
+    }
+
+    warmGeometry.setAttribute('position', new THREE.BufferAttribute(warmPositions, 3));
+    warmGeometry.setAttribute('size', new THREE.BufferAttribute(warmSizes, 1));
+
+    const warmMaterial = new THREE.PointsMaterial({
+      color: warmColor,
+      size: 0.12,
+      transparent: true,
+      opacity: 0, // Start hidden, will be controlled by audio
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+
+    this.flakePointsWarm = new THREE.Points(warmGeometry, warmMaterial);
+    this.flakePointsWarm.name = 'FlakesWarm';
+    this.flakeLightsGroup.add(this.flakePointsWarm);
+
+    // Create cool white-blue flakes
+    const coolGeometry = new THREE.BufferGeometry();
+    const coolPositions = new Float32Array(this.FLAKE_COUNT * 3);
+    const coolSizes = new Float32Array(this.FLAKE_COUNT);
+
+    for (let i = 0; i < this.FLAKE_COUNT; i++) {
+      const idx = this.FLAKE_COUNT + i;
+      // Distribute with slight offset from warm flakes
+      const x = (Math.random() - 0.5) * stageWidth;
+      const y = Math.random() * maxHeight + 0.5;
+      const z = (Math.random() - 0.5) * stageDepth - 1;
+
+      coolPositions[i * 3] = x;
+      coolPositions[i * 3 + 1] = y;
+      coolPositions[i * 3 + 2] = z;
+
+      // Store in master arrays
+      this.flakePositions[idx * 3] = x;
+      this.flakePositions[idx * 3 + 1] = y;
+      this.flakePositions[idx * 3 + 2] = z;
+
+      // Random velocities
+      this.flakeVelocities[idx * 3] = (Math.random() - 0.5) * 0.02;
+      this.flakeVelocities[idx * 3 + 1] = (Math.random() - 0.5) * 0.01;
+      this.flakeVelocities[idx * 3 + 2] = (Math.random() - 0.5) * 0.02;
+
+      // Colors
+      this.flakeColors[idx * 3] = coolColor.r;
+      this.flakeColors[idx * 3 + 1] = coolColor.g;
+      this.flakeColors[idx * 3 + 2] = coolColor.b;
+
+      // Random initial intensity and phase
+      this.flakeIntensities[idx] = Math.random() * 0.5 + 0.3;
+      this.flakePhases[idx] = Math.random() * Math.PI * 2;
+
+      coolSizes[i] = Math.random() * 0.12 + 0.04;
+    }
+
+    coolGeometry.setAttribute('position', new THREE.BufferAttribute(coolPositions, 3));
+    coolGeometry.setAttribute('size', new THREE.BufferAttribute(coolSizes, 1));
+
+    const coolMaterial = new THREE.PointsMaterial({
+      color: coolColor,
+      size: 0.1,
+      transparent: true,
+      opacity: 0, // Start hidden, will be controlled by audio
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+
+    this.flakePointsCool = new THREE.Points(coolGeometry, coolMaterial);
+    this.flakePointsCool.name = 'FlakesCool';
+    this.flakeLightsGroup.add(this.flakePointsCool);
+
+    this.scene.add(this.flakeLightsGroup);
+  }
+
+  /**
+   * Updates flake lights based on audio frame for reactive effects
+   */
+  updateFlakeLights(frame: AudioFrame): void {
+    if (!this.flakePointsWarm || !this.flakePointsCool) return;
+
+    // Base opacity influenced by energy
+    const energyFactor = 0.3 + frame.energy * 0.7;
+    const beatPulse = frame.isBeat ? 1.5 : 1.0;
+
+    // Update warm flakes (respond more to low frequencies)
+    const warmMaterial = this.flakePointsWarm.material as THREE.PointsMaterial;
+    warmMaterial.opacity = Math.min(0.9, 0.4 * energyFactor * beatPulse + frame.lowEnergy * 0.3);
+    warmMaterial.size = 0.1 + frame.lowEnergy * 0.08;
+
+    // Update cool flakes (respond more to high frequencies)
+    const coolMaterial = this.flakePointsCool.material as THREE.PointsMaterial;
+    coolMaterial.opacity = Math.min(0.8, 0.35 * energyFactor * beatPulse + frame.highEnergy * 0.3);
+    coolMaterial.size = 0.08 + frame.highEnergy * 0.06;
+
+    // On beats, add extra brightness pulse
+    if (frame.isBeat) {
+      warmMaterial.opacity = Math.min(1.0, warmMaterial.opacity + 0.2);
+      coolMaterial.opacity = Math.min(1.0, coolMaterial.opacity + 0.15);
+    }
+  }
+
+  /**
    * Creates a detailed truss structure with more realistic geometry
    */
   private createDetailedTruss(
@@ -834,6 +1015,67 @@ export class Stage {
     if (this.cameraPreset === 'dynamic') {
       this.updateDynamicCamera(deltaTime);
     }
+
+    // Update flake lights animation
+    this.updateFlakeLightsAnimation(deltaTime);
+  }
+
+  /**
+   * Animates flake lights with subtle twinkling and movement
+   */
+  private updateFlakeLightsAnimation(deltaTime: number): void {
+    if (!this.flakePointsWarm || !this.flakePointsCool) return;
+
+    this.flakeLightsTime += deltaTime * 0.001;
+
+    const warmPositions = this.flakePointsWarm.geometry.attributes.position.array as Float32Array;
+    const coolPositions = this.flakePointsCool.geometry.attributes.position.array as Float32Array;
+
+    const stageWidth = this.config.width * 1.5;
+    const stageDepth = this.config.depth * 2;
+    const maxHeight = this.config.trussHeight * 1.3;
+
+    // Animate warm flakes
+    for (let i = 0; i < this.FLAKE_COUNT; i++) {
+      // Subtle position drift
+      const phase = this.flakePhases[i];
+      const drift = Math.sin(this.flakeLightsTime * 0.5 + phase) * 0.02;
+
+      warmPositions[i * 3] += this.flakeVelocities[i * 3] + drift * 0.5;
+      warmPositions[i * 3 + 1] += this.flakeVelocities[i * 3 + 1];
+      warmPositions[i * 3 + 2] += this.flakeVelocities[i * 3 + 2] + drift * 0.3;
+
+      // Wrap around boundaries
+      if (warmPositions[i * 3] > stageWidth / 2) warmPositions[i * 3] = -stageWidth / 2;
+      if (warmPositions[i * 3] < -stageWidth / 2) warmPositions[i * 3] = stageWidth / 2;
+      if (warmPositions[i * 3 + 1] > maxHeight + 1) warmPositions[i * 3 + 1] = 1;
+      if (warmPositions[i * 3 + 1] < 1) warmPositions[i * 3 + 1] = maxHeight + 1;
+      if (warmPositions[i * 3 + 2] > stageDepth / 2 - 2) warmPositions[i * 3 + 2] = -stageDepth / 2 - 2;
+      if (warmPositions[i * 3 + 2] < -stageDepth / 2 - 2) warmPositions[i * 3 + 2] = stageDepth / 2 - 2;
+    }
+
+    // Animate cool flakes
+    for (let i = 0; i < this.FLAKE_COUNT; i++) {
+      const idx = this.FLAKE_COUNT + i;
+      const phase = this.flakePhases[idx];
+      const drift = Math.sin(this.flakeLightsTime * 0.4 + phase) * 0.015;
+
+      coolPositions[i * 3] += this.flakeVelocities[idx * 3] + drift * 0.4;
+      coolPositions[i * 3 + 1] += this.flakeVelocities[idx * 3 + 1];
+      coolPositions[i * 3 + 2] += this.flakeVelocities[idx * 3 + 2] + drift * 0.25;
+
+      // Wrap around boundaries
+      if (coolPositions[i * 3] > stageWidth / 2) coolPositions[i * 3] = -stageWidth / 2;
+      if (coolPositions[i * 3] < -stageWidth / 2) coolPositions[i * 3] = stageWidth / 2;
+      if (coolPositions[i * 3 + 1] > maxHeight + 0.5) coolPositions[i * 3 + 1] = 0.5;
+      if (coolPositions[i * 3 + 1] < 0.5) coolPositions[i * 3 + 1] = maxHeight + 0.5;
+      if (coolPositions[i * 3 + 2] > stageDepth / 2 - 1) coolPositions[i * 3 + 2] = -stageDepth / 2 - 1;
+      if (coolPositions[i * 3 + 2] < -stageDepth / 2 - 1) coolPositions[i * 3 + 2] = stageDepth / 2 - 1;
+    }
+
+    // Mark geometries for update
+    this.flakePointsWarm.geometry.attributes.position.needsUpdate = true;
+    this.flakePointsCool.geometry.attributes.position.needsUpdate = true;
   }
 
   /**
@@ -961,6 +1203,19 @@ export class Stage {
 
     // Dispose lighting controller
     this.lightingController.dispose();
+
+    // Dispose flake lights
+    if (this.flakePointsWarm) {
+      this.flakePointsWarm.geometry.dispose();
+      (this.flakePointsWarm.material as THREE.Material).dispose();
+    }
+    if (this.flakePointsCool) {
+      this.flakePointsCool.geometry.dispose();
+      (this.flakePointsCool.material as THREE.Material).dispose();
+    }
+    if (this.flakeLightsGroup) {
+      this.scene.remove(this.flakeLightsGroup);
+    }
 
     // Dispose GUI
     if (this.gui) {

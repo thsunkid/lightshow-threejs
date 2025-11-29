@@ -37,8 +37,9 @@ class LightshowApp {
   private stage!: Stage;
   private mappingEngine!: MappingEngine;
   private isPlaying = false;
-  private updateTimer: number | null = null;
+  private progressInterval: number | null = null;
   private isDragging = false;
+  private unsubscribeFrame: (() => void) | null = null;
 
   // UI Elements
   private playPauseBtn!: HTMLButtonElement;
@@ -248,15 +249,43 @@ class LightshowApp {
       const duration = this.audioAnalyzer.getDuration();
       this.totalTimeEl.textContent = this.formatTime(duration / 1000);
 
+      // Unsubscribe from previous frame callback if any
+      if (this.unsubscribeFrame) {
+        this.unsubscribeFrame();
+        this.unsubscribeFrame = null;
+      }
+
       // Set up frame callback to process audio and drive lights
-      this.audioAnalyzer.onFrame((frame: AudioFrame) => {
+      let frameCount = 0;
+      this.unsubscribeFrame = this.audioAnalyzer.onFrame((frame: AudioFrame) => {
+        frameCount++;
+
+        // Debug: Log every 60th frame (~1 per second at 60fps)
+        if (frameCount % 60 === 0) {
+          console.log('Audio Frame:', {
+            rms: frame.rms.toFixed(3),
+            energy: frame.energy.toFixed(3),
+            isBeat: frame.isBeat,
+            lowEnergy: frame.lowEnergy.toFixed(3),
+            spectralCentroid: frame.spectralCentroid.toFixed(3),
+          });
+        }
+
         // Process audio frame through mapping engine
         const commands: LightingCommand[] = this.mappingEngine.process(frame);
+
+        // Debug: Log commands on beats
+        if (frame.isBeat && commands.length > 0) {
+          console.log(`BEAT! Generated ${commands.length} commands`);
+        }
 
         // Execute commands on stage
         if (commands.length > 0) {
           this.stage.executeCommands(commands);
         }
+
+        // Update flake lights based on audio
+        this.stage.updateFlakeLights(frame);
       });
 
       // Update display
@@ -296,7 +325,7 @@ class LightshowApp {
   }
 
   /**
-   * Update progress display continuously
+   * Update progress display (called once to set initial state)
    */
   private updateProgress(): void {
     if (!this.audioAnalyzer) return;
@@ -304,20 +333,50 @@ class LightshowApp {
     const currentTime = this.audioAnalyzer.getCurrentTime() / 1000;
     const duration = this.audioAnalyzer.getDuration() / 1000;
 
+    this.updateProgressUI(currentTime, duration);
+  }
+
+  /**
+   * Start continuous progress updates using setInterval (more reliable than RAF)
+   */
+  private startProgressUpdates(): void {
+    // Clear any existing interval
+    this.stopProgressUpdates();
+
+    // Update every 50ms for smooth progress
+    this.progressInterval = window.setInterval(() => {
+      if (!this.audioAnalyzer || this.isDragging) return;
+
+      const currentTime = this.audioAnalyzer.getCurrentTime() / 1000;
+      const duration = this.audioAnalyzer.getDuration() / 1000;
+
+      this.updateProgressUI(currentTime, duration);
+    }, 50);
+  }
+
+  /**
+   * Stop progress updates
+   */
+  private stopProgressUpdates(): void {
+    if (this.progressInterval !== null) {
+      clearInterval(this.progressInterval);
+      this.progressInterval = null;
+    }
+  }
+
+  /**
+   * Update progress UI elements
+   */
+  private updateProgressUI(currentTimeSeconds: number, durationSeconds: number): void {
     // Update time displays
-    this.currentTimeEl.textContent = this.formatTime(currentTime);
-    this.totalTimeEl.textContent = this.formatTime(duration);
+    this.currentTimeEl.textContent = this.formatTime(currentTimeSeconds);
+    this.totalTimeEl.textContent = this.formatTime(durationSeconds);
 
     // Update progress bar
-    if (duration > 0 && !this.isDragging) {
-      const progress = (currentTime / duration) * 100;
+    if (durationSeconds > 0 && !this.isDragging) {
+      const progress = (currentTimeSeconds / durationSeconds) * 100;
       this.progressBar.style.width = `${progress}%`;
       this.progressHandle.style.left = `${progress}%`;
-    }
-
-    // Continue updating if playing
-    if (this.isPlaying) {
-      this.updateTimer = requestAnimationFrame(() => this.updateProgress());
     }
   }
 
@@ -406,7 +465,7 @@ class LightshowApp {
     }
   }
 
-  private play(): void {
+  private async play(): Promise<void> {
     if (!this.audioAnalyzer) {
       console.warn('No audio loaded. Please load an audio file first.');
       return;
@@ -416,13 +475,12 @@ class LightshowApp {
 
     this.isPlaying = true;
     this.playPauseBtn.innerHTML = '❚❚';
-    console.log('Playing...');
 
-    // Start audio playback
-    this.audioAnalyzer.play();
+    // Start audio playback (async to resume AudioContext if needed)
+    await this.audioAnalyzer.play();
 
-    // Start updating progress
-    this.updateProgress();
+    // Start continuous progress updates
+    this.startProgressUpdates();
   }
 
   private pause(): void {
@@ -435,11 +493,11 @@ class LightshowApp {
     // Pause audio
     this.audioAnalyzer.pause();
 
-    // Stop update timer
-    if (this.updateTimer) {
-      cancelAnimationFrame(this.updateTimer);
-      this.updateTimer = null;
-    }
+    // Stop progress updates
+    this.stopProgressUpdates();
+
+    // Update progress one more time to show paused position
+    this.updateProgress();
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -453,14 +511,11 @@ class LightshowApp {
     // Stop audio and reset
     this.audioAnalyzer.stop();
 
+    // Stop progress updates
+    this.stopProgressUpdates();
+
     // Update time display to show reset
     this.updateProgress();
-
-    // Stop update timer
-    if (this.updateTimer) {
-      cancelAnimationFrame(this.updateTimer);
-      this.updateTimer = null;
-    }
 
     // Reset all lights to default state
     this.stage.executeCommands([{

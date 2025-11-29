@@ -20,8 +20,8 @@ export class AudioAnalyzer {
   private audioContext: AudioContext;
   private audioBuffer: AudioBuffer | null = null;
   private sourceNode: AudioBufferSourceNode | null = null;
-  private startTime: number = 0;
-  private pauseTime: number = 0;
+  private startTime: number = 0;  // JS timestamp when playback started
+  private pauseTime: number = 0;  // Playback position when paused (in ms)
   private playing: boolean = false;
   private featureExtractor: FeatureExtractor;
   private beatDetector: BeatDetector;
@@ -88,7 +88,7 @@ export class AudioAnalyzer {
   /**
    * Start playback
    */
-  play(): void {
+  async play(): Promise<void> {
     if (!this.audioBuffer) {
       console.error('No audio loaded');
       return;
@@ -96,6 +96,11 @@ export class AudioAnalyzer {
 
     if (this.playing) {
       return;
+    }
+
+    // Resume AudioContext if suspended (browser autoplay policy)
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
     }
 
     // Create source node
@@ -109,10 +114,12 @@ export class AudioAnalyzer {
     this.sourceNode.connect(this.audioContext.destination);
     this.sourceNode.connect(this.featureExtractor.getAnalyserNode());
 
-    // Start playback
-    const offset = this.pauseTime / 1000;
-    this.sourceNode.start(0, offset);
-    this.startTime = this.audioContext.currentTime - offset;
+    // Start playback from the paused position
+    const offsetSeconds = this.pauseTime / 1000;
+    this.sourceNode.start(0, offsetSeconds);
+
+    // Use JavaScript time for tracking (more reliable than audioContext.currentTime)
+    this.startTime = performance.now() - this.pauseTime;
     this.playing = true;
 
     // Start animation loop
@@ -360,11 +367,11 @@ export class AudioAnalyzer {
       return this.pauseTime;
     }
 
-    if (!this.sourceNode) {
-      return 0;
-    }
+    // Use JavaScript time tracking for reliable timing
+    const currentTime = performance.now() - this.startTime;
 
-    return (this.audioContext.currentTime - this.startTime) * 1000;
+    // Clamp to duration to avoid overshooting
+    return Math.min(currentTime, this.getDuration());
   }
 
   /**
