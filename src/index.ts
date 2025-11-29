@@ -11,11 +11,11 @@
 // Import from each workstream
 // Uncomment as workstreams are completed:
 // import { AudioAnalyzer } from '@audio/AudioAnalyzer';
-// import { Stage } from '@stage/Stage';
+import { Stage } from '@stage/Stage';
 // import { StyleLearner } from '@style/StyleLearner';
 // import { MappingEngine } from '@mapping/MappingEngine';
 
-import type { AudioFrame, LightingCommand } from '@shared/types';
+// import type { AudioFrame, LightingCommand } from '@shared/types';
 
 console.log('Lightshow Generator initializing...');
 
@@ -24,14 +24,33 @@ console.log('Lightshow Generator initializing...');
  */
 class LightshowApp {
   // private audioAnalyzer: AudioAnalyzer;
-  // private stage: Stage;
+  private stage!: Stage;
   // private mappingEngine: MappingEngine;
   private isPlaying = false;
 
   constructor() {
+    this.setupStage();
     this.setupUI();
     this.setupDragAndDrop();
     console.log('Lightshow app ready. Drop an audio file to begin.');
+  }
+
+  private setupStage(): void {
+    const container = document.getElementById('canvas-container');
+    if (!container) {
+      console.error('Canvas container not found');
+      return;
+    }
+
+    this.stage = new Stage(container, {
+      hazeDensity: 0.3,
+      ambientLight: 0.05,
+    });
+    this.stage.init();
+    this.stage.start();
+
+    // Make stage available globally for debugging
+    (window as any).stage = this.stage;
   }
 
   private setupUI(): void {
@@ -85,6 +104,49 @@ class LightshowApp {
     // TODO: Initialize AudioAnalyzer with the file
     // this.audioAnalyzer = new AudioAnalyzer();
     // await this.audioAnalyzer.loadFile(file);
+
+    // For now, start a demo light show
+    this.startDemoShow();
+  }
+
+  private startDemoShow(): void {
+    console.log('Starting demo light show...');
+
+    // Test rainbow pattern
+    const colors = [
+      { r: 1, g: 0, b: 0 },
+      { r: 1, g: 0.5, b: 0 },
+      { r: 1, g: 1, b: 0 },
+      { r: 0, g: 1, b: 0 },
+      { r: 0, g: 0, b: 1 },
+      { r: 0.5, g: 0, b: 1 },
+    ];
+
+    const fixtures = this.stage.getAllFixtures();
+    fixtures.forEach((fixture, index) => {
+      const color = colors[index % colors.length];
+      this.stage.executeCommands([{
+        targetId: fixture.id,
+        updates: { intensity: 0.8, color },
+        transitionMs: 2000,
+        easing: 'easeInOut',
+      }]);
+    });
+
+    // Animate moving heads periodically
+    setInterval(() => {
+      if (!this.isPlaying) return;
+
+      this.stage.executeCommands([{
+        targetId: 'moving_head',
+        updates: {
+          pan: Math.random(),
+          tilt: 0.3 + Math.random() * 0.4,
+        },
+        transitionMs: 3000,
+        easing: 'easeInOut',
+      }]);
+    }, 4000);
   }
 
   private play(): void {

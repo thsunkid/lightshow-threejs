@@ -9,3 +9,11 @@
 
 export { MappingEngine } from './MappingEngine';
 export { RuleEvaluator } from './rules/RuleEvaluator';
+export {
+  getDefaultRules,
+  getGenreRules,
+  createCustomRule,
+  validateRule,
+  mergeRuleSets,
+  DEFAULT_PALETTES
+} from './rules/DefaultRules';

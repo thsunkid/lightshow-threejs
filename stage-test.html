@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lightshow Stage Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #000;
+    }
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+      z-index: 100;
+    }
+    #info h3 {
+      margin: 0 0 10px 0;
+    }
+    #info p {
+      margin: 5px 0;
+    }
+    .controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+    }
+    .controls button {
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background 0.3s;
+    }
+    .controls button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h3>Lightshow Stage Test</h3>
+    <p>Use GUI controls (top-right) to adjust settings</p>
+    <p>Camera: Use dropdown to switch views</p>
+    <p>Lighting: Test buttons for effects</p>
+  </div>
+
+  <div class="controls">
+    <button onclick="testRainbow()">Rainbow</button>
+    <button onclick="testSweep()">Sweep</button>
+    <button onclick="testPulse()">Pulse</button>
+    <button onclick="testStrobe()">Strobe</button>
+    <button onclick="blackout()">Blackout</button>
+    <button onclick="whiteout()">Whiteout</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script type="module">
+    import { Stage } from './src/stage/Stage.ts';
+
+    // Create stage
+    const container = document.getElementById('canvas-container');
+    const stage = new Stage(container, {
+      hazeDensity: 0.5,
+      ambientLight: 0.1,
+    });
+
+    // Initialize stage
+    stage.init();
+
+    // Start render loop
+    stage.start();
+
+    // Make stage globally available
+    window.stage = stage;
+
+    // Control functions
+    window.testRainbow = () => {
+      const colors = [
+        { r: 1, g: 0, b: 0 },
+        { r: 1, g: 0.5, b: 0 },
+        { r: 1, g: 1, b: 0 },
+        { r: 0, g: 1, b: 0 },
+        { r: 0, g: 0, b: 1 },
+        { r: 0.5, g: 0, b: 1 },
+      ];
+
+      const fixtures = stage.getAllFixtures();
+      fixtures.forEach((fixture, index) => {
+        const color = colors[index % colors.length];
+        stage.executeCommands([{
+          targetId: fixture.id,
+          updates: { intensity: 1, color },
+          transitionMs: 1000,
+          easing: 'easeInOut',
+        }]);
+      });
+    };
+
+    window.testSweep = () => {
+      stage.executeCommands([{
+        targetId: 'moving_head',
+        updates: {
+          pan: Math.random(),
+          tilt: 0.3 + Math.random() * 0.4,
+          intensity: 1,
+        },
+        transitionMs: 2000,
+        easing: 'easeInOut',
+      }]);
+    };
+
+    window.testPulse = () => {
+      // Pulse on
+      stage.executeCommands([{
+        targetId: 'all',
+        updates: { intensity: 1 },
+        transitionMs: 100,
+        easing: 'easeIn',
+      }]);
+
+      // Pulse off
+      setTimeout(() => {
+        stage.executeCommands([{
+          targetId: 'all',
+          updates: { intensity: 0 },
+          transitionMs: 500,
+          easing: 'easeOut',
+        }]);
+      }, 100);
+    };
+
+    window.testStrobe = () => {
+      stage.executeCommands([{
+        targetId: 'strobe',
+        updates: { intensity: 1, rate: 15 },
+        transitionMs: 0,
+        easing: 'snap',
+      }]);
+
+      setTimeout(() => {
+        stage.executeCommands([{
+          targetId: 'strobe',
+          updates: { intensity: 0 },
+          transitionMs: 200,
+          easing: 'easeOut',
+        }]);
+      }, 2000);
+    };
+
+    window.blackout = () => {
+      stage.executeCommands([{
+        targetId: 'all',
+        updates: { intensity: 0 },
+        transitionMs: 500,
+        easing: 'easeOut',
+      }]);
+    };
+
+    window.whiteout = () => {
+      stage.executeCommands([{
+        targetId: 'all',
+        updates: { intensity: 1, color: { r: 1, g: 1, b: 1 } },
+        transitionMs: 200,
+        easing: 'easeIn',
+      }]);
+    };
+
+    console.log('Stage initialized! Use window.stage to access the instance.');
+  </script>
+</body>
+</html>

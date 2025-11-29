@@ -9,4 +9,4 @@
 
 export { StyleLearner } from './StyleLearner';
 export { VideoAnalyzer } from './VideoAnalyzer';
-export { StyleProfile } from './StyleProfile';
+export { StyleProfileManager, StyleProfile } from './StyleProfile';
