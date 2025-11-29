@@ -66,7 +66,7 @@ export function lerpColor(a: RGB, b: RGB, t: number): RGB {
   return {
     r: lerp(a.r, b.r, t),
     g: lerp(a.g, b.g, t),
-    b: lerp(b.b, b.b, t),
+    b: lerp(a.b, b.b, t),
   };
 }
 

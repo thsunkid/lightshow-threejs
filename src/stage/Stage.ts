@@ -73,8 +73,34 @@ export class Stage {
    */
   private setupScene(): void {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x000000, 0.02 * this.config.hazeDensity);
-    this.scene.background = new THREE.Color(0x000000);
+    // Enhanced fog for atmospheric haze effect that makes light beams visible
+    this.scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015 * this.config.hazeDensity);
+
+    // Gradient background to simulate venue atmosphere
+    const gradientTexture = this.createGradientTexture();
+    this.scene.background = gradientTexture;
+  }
+
+  /**
+   * Creates a gradient texture for the background
+   */
+  private createGradientTexture(): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+
+    // Create gradient from dark blue-black at top to pure black at bottom
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    gradient.addColorStop(0, '#0a0a1a');
+    gradient.addColorStop(0.5, '#050510');
+    gradient.addColorStop(1, '#000000');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 256, 256);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
   }
 
   /**
@@ -82,7 +108,8 @@ export class Stage {
    */
   private setupCamera(): void {
     const aspect = this.container.clientWidth / this.container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+    // Adjusted FOV for more dramatic framing
+    this.camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 1000);
     this.setCameraPreset('front');
   }
 
@@ -113,31 +140,79 @@ export class Stage {
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
 
-    // Bloom pass for glow effects
+    // Enhanced bloom pass for dramatic light glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(this.container.clientWidth, this.container.clientHeight),
-      1.5, // strength
-      0.4, // radius
-      0.85  // threshold
+      1.8, // strength - increased for more dramatic bloom
+      0.5, // radius - slightly larger
+      0.75  // threshold - lower to catch more lights
     );
     this.composer.addPass(bloomPass);
 
-    // Output pass
+    // Output pass with tone mapping
     const outputPass = new OutputPass();
     this.composer.addPass(outputPass);
+
+    // Add volumetric spotlight effect
+    this.addVolumetricLighting();
+  }
+
+  /**
+   * Adds volumetric lighting effect for visible light beams
+   */
+  private addVolumetricLighting(): void {
+    // Create a subtle volumetric fog particle system
+    const fogGeometry = new THREE.BufferGeometry();
+    const fogCount = 500;
+    const positions = new Float32Array(fogCount * 3);
+    const opacities = new Float32Array(fogCount);
+
+    for (let i = 0; i < fogCount; i++) {
+      // Distribute fog particles around the stage area
+      positions[i * 3] = (Math.random() - 0.5) * this.config.width * 2;
+      positions[i * 3 + 1] = Math.random() * this.config.trussHeight * 1.5;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * this.config.depth * 3;
+
+      // Random opacity for each particle
+      opacities[i] = Math.random() * 0.5 + 0.1;
+    }
+
+    fogGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    fogGeometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+
+    const fogMaterial = new THREE.PointsMaterial({
+      color: 0x202040,
+      size: 0.5,
+      transparent: true,
+      opacity: 0.15,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    const fogParticles = new THREE.Points(fogGeometry, fogMaterial);
+    fogParticles.name = 'VolumetricFog';
+    this.scene.add(fogParticles);
   }
 
   /**
    * Sets up basic scene lighting
    */
   private setupLighting(): void {
-    // Ambient light for minimal visibility
-    const ambientLight = new THREE.AmbientLight(0x404040, this.config.ambientLight);
+    // Very subtle ambient light for minimal visibility
+    const ambientLight = new THREE.AmbientLight(0x101020, this.config.ambientLight * 0.5);
     this.scene.add(ambientLight);
 
-    // Subtle fill light
-    const fillLight = new THREE.DirectionalLight(0x202040, 0.2);
-    fillLight.position.set(0, 10, 5);
+    // Subtle rim light from behind
+    const rimLight = new THREE.DirectionalLight(0x1a1a3a, 0.15);
+    rimLight.position.set(0, 15, -10);
+    rimLight.castShadow = true;
+    rimLight.shadow.mapSize.width = 2048;
+    rimLight.shadow.mapSize.height = 2048;
+    this.scene.add(rimLight);
+
+    // Very subtle front fill to see stage structure
+    const fillLight = new THREE.DirectionalLight(0x0a0a1a, 0.1);
+    fillLight.position.set(0, 8, 15);
     this.scene.add(fillLight);
   }
 
@@ -148,116 +223,461 @@ export class Stage {
     this.stageGroup = new THREE.Group();
     this.stageGroup.name = 'StageGeometry';
 
-    // Stage floor
+    // === STAGE PLATFORM ===
+    // Raised stage platform
+    const platformGeometry = new THREE.BoxGeometry(
+      this.config.width + 4,
+      1.2,
+      this.config.depth + 2
+    );
+    const platformMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,
+      metalness: 0.2,
+      roughness: 0.8,
+    });
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.position.y = -0.6;
+    platform.castShadow = true;
+    platform.receiveShadow = true;
+    this.stageGroup.add(platform);
+
+    // Stage floor (glossy black surface)
     const floorGeometry = new THREE.BoxGeometry(
       this.config.width,
-      0.5,
+      0.1,
       this.config.depth
     );
     const floorMaterial = new THREE.MeshStandardMaterial({
-      color: 0x0a0a0a,
-      metalness: 0.3,
-      roughness: 0.7,
+      color: 0x000000,
+      metalness: 0.8,
+      roughness: 0.3,
+      envMapIntensity: 1.0,
     });
     const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.position.y = -0.25;
+    floor.position.y = 0.05;
     floor.receiveShadow = true;
     this.stageGroup.add(floor);
 
-    // Stage surface (reflective)
-    const surfaceGeometry = new THREE.PlaneGeometry(
-      this.config.width,
-      this.config.depth
-    );
-    const surfaceMaterial = new THREE.MeshStandardMaterial({
-      color: 0x050505,
-      metalness: 0.8,
-      roughness: 0.2,
-      envMapIntensity: 0.5,
-    });
-    const surface = new THREE.Mesh(surfaceGeometry, surfaceMaterial);
-    surface.rotation.x = -Math.PI / 2;
-    surface.position.y = 0.01;
-    surface.receiveShadow = true;
-    this.stageGroup.add(surface);
+    // Edge lighting strips
+    this.createEdgeLighting();
 
-    // Back truss
-    this.createTruss(
+    // === BACK WALL / LED SCREEN ===
+    this.createBackWall();
+
+    // === TRUSS STRUCTURE ===
+    // Main back truss (holds most lights)
+    this.createDetailedTruss(
       { x: 0, y: this.config.trussHeight, z: -this.config.depth / 2 - 2 },
-      this.config.width * 0.8,
-      true
+      this.config.width * 0.9,
+      true,
+      'back'
     );
 
     // Front truss
-    this.createTruss(
-      { x: 0, y: this.config.trussHeight - 1, z: this.config.depth / 2 },
-      this.config.width * 0.6,
-      true
+    this.createDetailedTruss(
+      { x: 0, y: this.config.trussHeight - 0.5, z: this.config.depth / 2 + 1 },
+      this.config.width * 0.7,
+      true,
+      'front'
     );
 
-    // Side trusses
-    this.createTruss(
-      { x: -this.config.width / 2 - 1, y: this.config.trussHeight - 2, z: 0 },
-      this.config.depth * 0.8,
-      false
+    // Side trusses (vertical towers)
+    this.createVerticalTruss(
+      { x: -this.config.width / 2 - 2, y: 0, z: 0 },
+      this.config.trussHeight + 2
     );
-    this.createTruss(
-      { x: this.config.width / 2 + 1, y: this.config.trussHeight - 2, z: 0 },
-      this.config.depth * 0.8,
-      false
+    this.createVerticalTruss(
+      { x: this.config.width / 2 + 2, y: 0, z: 0 },
+      this.config.trussHeight + 2
     );
+
+    // Connecting trusses
+    this.createDetailedTruss(
+      { x: -this.config.width / 2 - 2, y: this.config.trussHeight - 1, z: 0 },
+      this.config.depth + 4,
+      false,
+      'side'
+    );
+    this.createDetailedTruss(
+      { x: this.config.width / 2 + 2, y: this.config.trussHeight - 1, z: 0 },
+      this.config.depth + 4,
+      false,
+      'side'
+    );
+
+    // === AUDIENCE AREA ===
+    this.createAudienceArea();
+
+    // === STAGE PROPS ===
+    this.createStageProps();
 
     this.scene.add(this.stageGroup);
   }
 
   /**
-   * Creates a truss structure
+   * Creates edge lighting around the stage
    */
-  private createTruss(
-    position: { x: number; y: number; z: number },
-    length: number,
-    horizontal: boolean
-  ): void {
-    const trussGroup = new THREE.Group();
+  private createEdgeLighting(): void {
+    const edgeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x2040ff,
+      transparent: true,
+      opacity: 0.9,
+    });
 
-    // Main beam
-    const beamGeometry = new THREE.BoxGeometry(
-      horizontal ? length : 0.3,
-      0.3,
-      horizontal ? 0.3 : length
+    // Front edge
+    const frontEdge = new THREE.BoxGeometry(this.config.width, 0.05, 0.1);
+    const frontEdgeMesh = new THREE.Mesh(frontEdge, edgeMaterial);
+    frontEdgeMesh.position.set(0, 0.1, this.config.depth / 2);
+    this.stageGroup.add(frontEdgeMesh);
+
+    // Side edges
+    const sideEdge = new THREE.BoxGeometry(0.1, 0.05, this.config.depth);
+    const leftEdgeMesh = new THREE.Mesh(sideEdge, edgeMaterial);
+    leftEdgeMesh.position.set(-this.config.width / 2, 0.1, 0);
+    this.stageGroup.add(leftEdgeMesh);
+
+    const rightEdgeMesh = new THREE.Mesh(sideEdge, edgeMaterial);
+    rightEdgeMesh.position.set(this.config.width / 2, 0.1, 0);
+    this.stageGroup.add(rightEdgeMesh);
+  }
+
+  /**
+   * Creates the back wall / LED screen
+   */
+  private createBackWall(): void {
+    // Main back wall structure
+    const wallGeometry = new THREE.BoxGeometry(
+      this.config.width + 6,
+      this.config.trussHeight + 2,
+      0.5
     );
-    const beamMaterial = new THREE.MeshStandardMaterial({
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,
+      metalness: 0.3,
+      roughness: 0.8,
+    });
+    const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+    wall.position.set(0, (this.config.trussHeight + 2) / 2, -this.config.depth / 2 - 4);
+    wall.castShadow = true;
+    this.stageGroup.add(wall);
+
+    // LED screen panels (emissive)
+    const screenGeometry = new THREE.BoxGeometry(
+      this.config.width * 0.8,
+      this.config.trussHeight * 0.7,
+      0.1
+    );
+    const screenMaterial = new THREE.MeshStandardMaterial({
+      color: 0x001030,
+      emissive: 0x001030,
+      emissiveIntensity: 0.2,
+      metalness: 0.9,
+      roughness: 0.1,
+    });
+    const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+    screen.position.set(0, this.config.trussHeight * 0.5, -this.config.depth / 2 - 3.7);
+    this.stageGroup.add(screen);
+
+    // Screen frame
+    this.createScreenFrame(screen.position);
+  }
+
+  /**
+   * Creates a frame around the LED screen
+   */
+  private createScreenFrame(position: THREE.Vector3): void {
+    const frameMaterial = new THREE.MeshStandardMaterial({
       color: 0x1a1a1a,
       metalness: 0.9,
+      roughness: 0.2,
+    });
+
+    const frameWidth = 0.2;
+    const screenWidth = this.config.width * 0.8;
+    const screenHeight = this.config.trussHeight * 0.7;
+
+    // Top frame
+    const topFrame = new THREE.BoxGeometry(screenWidth + frameWidth * 2, frameWidth, 0.2);
+    const topMesh = new THREE.Mesh(topFrame, frameMaterial);
+    topMesh.position.set(position.x, position.y + screenHeight / 2, position.z);
+    this.stageGroup.add(topMesh);
+
+    // Bottom frame
+    const bottomMesh = new THREE.Mesh(topFrame, frameMaterial);
+    bottomMesh.position.set(position.x, position.y - screenHeight / 2, position.z);
+    this.stageGroup.add(bottomMesh);
+
+    // Side frames
+    const sideFrame = new THREE.BoxGeometry(frameWidth, screenHeight, 0.2);
+    const leftMesh = new THREE.Mesh(sideFrame, frameMaterial);
+    leftMesh.position.set(position.x - screenWidth / 2 - frameWidth / 2, position.y, position.z);
+    this.stageGroup.add(leftMesh);
+
+    const rightMesh = new THREE.Mesh(sideFrame, frameMaterial);
+    rightMesh.position.set(position.x + screenWidth / 2 + frameWidth / 2, position.y, position.z);
+    this.stageGroup.add(rightMesh);
+  }
+
+  /**
+   * Creates audience area hint
+   */
+  private createAudienceArea(): void {
+    // Dark floor extending into audience
+    const audienceFloorGeometry = new THREE.PlaneGeometry(
+      this.config.width * 2,
+      30
+    );
+    const audienceFloorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      metalness: 0,
+      roughness: 1,
+      opacity: 0.95,
+      transparent: true,
+    });
+    const audienceFloor = new THREE.Mesh(audienceFloorGeometry, audienceFloorMaterial);
+    audienceFloor.rotation.x = -Math.PI / 2;
+    audienceFloor.position.set(0, -1, 15);
+    audienceFloor.receiveShadow = true;
+    this.stageGroup.add(audienceFloor);
+
+    // Barrier/rail in front of stage
+    const barrierGeometry = new THREE.BoxGeometry(this.config.width, 1, 0.1);
+    const barrierMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a,
+      metalness: 0.8,
       roughness: 0.3,
     });
-    const beam = new THREE.Mesh(beamGeometry, beamMaterial);
-    trussGroup.add(beam);
+    const barrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
+    barrier.position.set(0, -0.5, this.config.depth / 2 + 2);
+    this.stageGroup.add(barrier);
+  }
 
-    // Support structures
-    const supportCount = Math.floor(length / 2);
-    for (let i = 0; i < supportCount; i++) {
-      const offset = -length / 2 + (i + 1) * (length / supportCount);
-      const supportGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 8);
-      const support1 = new THREE.Mesh(supportGeometry, beamMaterial);
-      const support2 = new THREE.Mesh(supportGeometry, beamMaterial);
+  /**
+   * Creates stage props for added realism
+   */
+  private createStageProps(): void {
+    // Side monitors
+    const monitorGeometry = new THREE.BoxGeometry(2, 1.5, 0.2);
+    const monitorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,
+      metalness: 0.7,
+      roughness: 0.3,
+    });
+
+    const leftMonitor = new THREE.Mesh(monitorGeometry, monitorMaterial);
+    leftMonitor.position.set(-this.config.width / 2 + 2, 0.75, this.config.depth / 2 - 1);
+    leftMonitor.rotation.y = Math.PI / 6;
+    this.stageGroup.add(leftMonitor);
+
+    const rightMonitor = new THREE.Mesh(monitorGeometry, monitorMaterial);
+    rightMonitor.position.set(this.config.width / 2 - 2, 0.75, this.config.depth / 2 - 1);
+    rightMonitor.rotation.y = -Math.PI / 6;
+    this.stageGroup.add(rightMonitor);
+
+    // Speaker stacks (side fill)
+    this.createSpeakerStack({ x: -this.config.width / 2 - 3, y: 0, z: 2 });
+    this.createSpeakerStack({ x: this.config.width / 2 + 3, y: 0, z: 2 });
+  }
+
+  /**
+   * Creates a speaker stack
+   */
+  private createSpeakerStack(position: { x: number; y: number; z: number }): void {
+    const speakerMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,
+      metalness: 0.5,
+      roughness: 0.6,
+    });
+
+    const stackGroup = new THREE.Group();
+
+    // Create multiple speaker boxes
+    for (let i = 0; i < 3; i++) {
+      const speaker = new THREE.BoxGeometry(1.5, 1, 0.8);
+      const speakerMesh = new THREE.Mesh(speaker, speakerMaterial);
+      speakerMesh.position.y = i * 1.1 + 0.5;
+      speakerMesh.castShadow = true;
+      stackGroup.add(speakerMesh);
+
+      // Add speaker cone detail
+      const coneGeometry = new THREE.CylinderGeometry(0.3, 0.35, 0.1, 16);
+      const coneMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a,
+        metalness: 0.8,
+        roughness: 0.2,
+      });
+      const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+      cone.position.set(0, i * 1.1 + 0.5, 0.41);
+      cone.rotation.x = Math.PI / 2;
+      stackGroup.add(cone);
+    }
+
+    stackGroup.position.set(position.x, position.y, position.z);
+    this.stageGroup.add(stackGroup);
+  }
+
+  /**
+   * Creates a detailed truss structure with more realistic geometry
+   */
+  private createDetailedTruss(
+    position: { x: number; y: number; z: number },
+    length: number,
+    horizontal: boolean,
+    type: 'back' | 'front' | 'side'
+  ): void {
+    const trussGroup = new THREE.Group();
+    trussGroup.name = `Truss_${type}`;
+
+    const beamMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2a2a2a,
+      metalness: 0.9,
+      roughness: 0.2,
+    });
+
+    // Main beams (square truss)
+    const beamThickness = 0.15;
+    const trussWidth = 0.5;
+
+    // Create 4 main beams for square truss
+    for (let i = 0; i < 4; i++) {
+      const beamGeometry = new THREE.BoxGeometry(
+        horizontal ? length : beamThickness,
+        beamThickness,
+        horizontal ? beamThickness : length
+      );
+      const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+
+      // Position beams in square formation
+      const offsetX = (i % 2 === 0 ? -1 : 1) * trussWidth / 2;
+      const offsetY = (i < 2 ? -1 : 1) * trussWidth / 2;
 
       if (horizontal) {
-        support1.position.set(offset, 0, 0.2);
-        support2.position.set(offset, 0, -0.2);
+        beam.position.set(0, offsetY, offsetX);
       } else {
-        support1.position.set(0.2, 0, offset);
-        support2.position.set(-0.2, 0, offset);
+        beam.position.set(offsetX, offsetY, 0);
       }
 
-      support1.rotation.z = Math.PI / 4;
-      support2.rotation.z = -Math.PI / 4;
-      trussGroup.add(support1, support2);
+      beam.castShadow = true;
+      trussGroup.add(beam);
+    }
+
+    // Cross bracing
+    const braceCount = Math.floor(length / 1.5);
+    for (let i = 0; i < braceCount; i++) {
+      const offset = -length / 2 + (i + 0.5) * (length / braceCount);
+
+      // Diagonal braces
+      for (let j = 0; j < 4; j++) {
+        const braceGeometry = new THREE.CylinderGeometry(0.03, 0.03, trussWidth * 1.4, 6);
+        const brace = new THREE.Mesh(braceGeometry, beamMaterial);
+
+        if (horizontal) {
+          brace.position.set(offset, 0, 0);
+        } else {
+          brace.position.set(0, 0, offset);
+        }
+
+        // Rotate for diagonal
+        brace.rotation.z = (j % 2 === 0 ? 1 : -1) * Math.PI / 4;
+        if (!horizontal) {
+          brace.rotation.x = (j < 2 ? 1 : -1) * Math.PI / 4;
+        }
+
+        trussGroup.add(brace);
+      }
+
+      // Perpendicular braces
+      const perpBraceGeometry = new THREE.BoxGeometry(
+        horizontal ? 0.05 : trussWidth,
+        trussWidth,
+        horizontal ? trussWidth : 0.05
+      );
+      const perpBrace = new THREE.Mesh(perpBraceGeometry, beamMaterial);
+      if (horizontal) {
+        perpBrace.position.set(offset, 0, 0);
+      } else {
+        perpBrace.position.set(0, 0, offset);
+      }
+      trussGroup.add(perpBrace);
     }
 
     trussGroup.position.set(position.x, position.y, position.z);
     this.stageGroup.add(trussGroup);
   }
+
+  /**
+   * Creates a vertical truss tower
+   */
+  private createVerticalTruss(position: { x: number; y: number; z: number }, height: number): void {
+    const trussGroup = new THREE.Group();
+    trussGroup.name = 'VerticalTruss';
+
+    const beamMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2a2a2a,
+      metalness: 0.9,
+      roughness: 0.2,
+    });
+
+    const trussWidth = 0.6;
+    const beamThickness = 0.15;
+
+    // 4 vertical beams
+    for (let i = 0; i < 4; i++) {
+      const beamGeometry = new THREE.BoxGeometry(beamThickness, height, beamThickness);
+      const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+
+      const offsetX = (i % 2 === 0 ? -1 : 1) * trussWidth / 2;
+      const offsetZ = (i < 2 ? -1 : 1) * trussWidth / 2;
+
+      beam.position.set(offsetX, height / 2, offsetZ);
+      beam.castShadow = true;
+      trussGroup.add(beam);
+    }
+
+    // Horizontal bracing
+    const braceCount = Math.floor(height / 1.2);
+    for (let i = 0; i < braceCount; i++) {
+      const yOffset = (i + 0.5) * (height / braceCount);
+
+      // Horizontal braces on all 4 sides
+      for (let side = 0; side < 4; side++) {
+        const braceGeometry = new THREE.BoxGeometry(
+          side % 2 === 0 ? trussWidth : 0.05,
+          0.05,
+          side % 2 === 0 ? 0.05 : trussWidth
+        );
+        const brace = new THREE.Mesh(braceGeometry, beamMaterial);
+        brace.position.y = yOffset;
+
+        if (side === 0) brace.position.z = trussWidth / 2;
+        if (side === 1) brace.position.x = trussWidth / 2;
+        if (side === 2) brace.position.z = -trussWidth / 2;
+        if (side === 3) brace.position.x = -trussWidth / 2;
+
+        trussGroup.add(brace);
+      }
+
+      // Diagonal braces
+      for (let j = 0; j < 4; j++) {
+        const diagBraceGeometry = new THREE.CylinderGeometry(0.03, 0.03, trussWidth * 1.4, 6);
+        const diagBrace = new THREE.Mesh(diagBraceGeometry, beamMaterial);
+        diagBrace.position.y = yOffset;
+        diagBrace.rotation.z = (j % 2 === 0 ? 1 : -1) * Math.PI / 4;
+        diagBrace.rotation.y = j * Math.PI / 2;
+        trussGroup.add(diagBrace);
+      }
+    }
+
+    // Base plate
+    const baseGeometry = new THREE.BoxGeometry(trussWidth * 1.5, 0.2, trussWidth * 1.5);
+    const basePlate = new THREE.Mesh(baseGeometry, beamMaterial);
+    basePlate.position.y = -0.1;
+    trussGroup.add(basePlate);
+
+    trussGroup.position.set(position.x, position.y, position.z);
+    this.stageGroup.add(trussGroup);
+  }
+
 
   /**
    * Sets up the lighting controller
@@ -301,7 +721,7 @@ export class Stage {
     const stageFolder = this.gui.addFolder('Stage');
     stageFolder.add(this.config, 'hazeDensity', 0, 1, 0.01).onChange((value: number) => {
       if (this.scene.fog instanceof THREE.FogExp2) {
-        this.scene.fog.density = 0.02 * value;
+        this.scene.fog.density = 0.015 * value;
       }
     });
     stageFolder.add(this.config, 'ambientLight', 0, 1, 0.01).onChange((value: number) => {
@@ -420,16 +840,19 @@ export class Stage {
    * Updates dynamic camera movement
    */
   private updateDynamicCamera(deltaTime: number): void {
-    this.dynamicCameraTime += deltaTime * 0.0001;
+    this.dynamicCameraTime += deltaTime * 0.00008;
 
-    const radius = 25;
-    const height = 8 + Math.sin(this.dynamicCameraTime * 0.5) * 3;
+    // More dramatic camera movement
+    const radius = 30 + Math.sin(this.dynamicCameraTime * 2) * 5;
+    const height = 10 + Math.sin(this.dynamicCameraTime * 0.7) * 5;
     const angle = this.dynamicCameraTime;
 
     this.camera.position.x = Math.cos(angle) * radius;
     this.camera.position.y = height;
-    this.camera.position.z = Math.sin(angle) * radius;
-    this.camera.lookAt(0, 2, 0);
+    this.camera.position.z = Math.sin(angle) * radius + 10;
+
+    // Look at slightly above stage center for better framing
+    this.camera.lookAt(0, 3, -2);
   }
 
   /**
@@ -442,21 +865,24 @@ export class Stage {
 
     switch (preset) {
       case 'front':
-        this.camera.position.set(0, 5, 20);
-        this.camera.lookAt(0, 2, 0);
+        // Dramatic front view showing full stage
+        this.camera.position.set(0, 7, 25);
+        this.camera.lookAt(0, 3, -2);
         break;
       case 'side':
-        this.camera.position.set(25, 8, 0);
-        this.camera.lookAt(0, 2, 0);
+        // Side angle showing depth
+        this.camera.position.set(30, 10, 5);
+        this.camera.lookAt(0, 3, 0);
         break;
       case 'top':
-        this.camera.position.set(0, 30, 5);
+        // Overhead view for full layout
+        this.camera.position.set(0, 35, 8);
         this.camera.lookAt(0, 0, 0);
         break;
       case 'dynamic':
-        // Initial position, will be animated
-        this.camera.position.set(20, 8, 20);
-        this.camera.lookAt(0, 2, 0);
+        // Initial position for animated camera
+        this.camera.position.set(25, 10, 20);
+        this.camera.lookAt(0, 3, 0);
         break;
     }
   }

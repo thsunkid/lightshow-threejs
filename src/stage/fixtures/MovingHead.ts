@@ -32,30 +32,80 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
     this.tiltGroup = new THREE.Group();
     this.panGroup.add(this.tiltGroup);
 
-    // Create housing (base of moving head)
-    const housingGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.3, 16);
+    // Create housing (base of moving head) - more detailed
+    const housingGeometry = new THREE.CylinderGeometry(0.18, 0.22, 0.35, 24);
     const housingMaterial = new THREE.MeshStandardMaterial({
-      color: 0x333333,
-      metalness: 0.8,
-      roughness: 0.2,
+      color: 0x1a1a1a,
+      metalness: 0.9,
+      roughness: 0.15,
     });
     this.housing = new THREE.Mesh(housingGeometry, housingMaterial);
+    this.housing.castShadow = true;
     this.group.add(this.housing);
 
-    // Create head (moving part)
-    const headGeometry = new THREE.CylinderGeometry(0.12, 0.15, 0.25, 16);
-    const headMaterial = new THREE.MeshStandardMaterial({
-      color: 0x222222,
+    // Create yoke arms (connects base to head)
+    const yokeArmGeometry = new THREE.BoxGeometry(0.06, 0.3, 0.06);
+    const yokeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a,
       metalness: 0.9,
+      roughness: 0.15,
+    });
+    const leftYoke = new THREE.Mesh(yokeArmGeometry, yokeMaterial);
+    leftYoke.position.set(-0.15, 0, 0);
+    this.panGroup.add(leftYoke);
+
+    const rightYoke = new THREE.Mesh(yokeArmGeometry, yokeMaterial);
+    rightYoke.position.set(0.15, 0, 0);
+    this.panGroup.add(rightYoke);
+
+    // Create head (moving part) with more detail
+    const headGroup = new THREE.Group();
+
+    // Main head body
+    const headGeometry = new THREE.CylinderGeometry(0.14, 0.16, 0.3, 24);
+    const headMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,
+      metalness: 0.95,
       roughness: 0.1,
     });
     this.head = new THREE.Mesh(headGeometry, headMaterial);
     this.head.rotation.z = Math.PI / 2; // Rotate to point forward
-    this.tiltGroup.add(this.head);
+    this.head.castShadow = true;
+    headGroup.add(this.head);
 
-    // Create spotlight
-    this.spotlight = new THREE.SpotLight(0xffffff, 100, 50, Math.PI / 8, 0.5, 2);
+    // Add lens detail
+    const lensGeometry = new THREE.CylinderGeometry(0.11, 0.11, 0.05, 24);
+    const lensMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2040ff,
+      metalness: 0.7,
+      roughness: 0.1,
+      emissive: 0x1020ff,
+      emissiveIntensity: 0.2,
+    });
+    const lens = new THREE.Mesh(lensGeometry, lensMaterial);
+    lens.rotation.z = Math.PI / 2;
+    lens.position.x = 0.15;
+    headGroup.add(lens);
+
+    // Add heat sink fins for realism
+    for (let i = 0; i < 6; i++) {
+      const finGeometry = new THREE.BoxGeometry(0.02, 0.18, 0.18);
+      const fin = new THREE.Mesh(finGeometry, headMaterial);
+      fin.position.x = -0.1 + i * 0.03;
+      fin.rotation.z = Math.PI / 2;
+      headGroup.add(fin);
+    }
+
+    this.tiltGroup.add(headGroup);
+
+    // Create spotlight with enhanced settings
+    this.spotlight = new THREE.SpotLight(0xffffff, 150, 60, Math.PI / 10, 0.3, 1.5);
     this.spotlight.position.set(0, 0, 0);
+    this.spotlight.castShadow = true;
+    this.spotlight.shadow.mapSize.width = 1024;
+    this.spotlight.shadow.mapSize.height = 1024;
+    this.spotlight.shadow.camera.near = 0.5;
+    this.spotlight.shadow.camera.far = 50;
     this.tiltGroup.add(this.spotlight);
 
     // Create target for spotlight
@@ -80,11 +130,11 @@ export class MovingHead extends BaseFixtureImpl<IMovingHead> {
    * Creates volumetric beam mesh
    */
   private createBeam(): void {
-    const beamLength = 20;
+    const beamLength = 25;
     const beamGeometry = new THREE.ConeGeometry(
-      2, // radius at far end
+      3, // radius at far end - wider for more dramatic effect
       beamLength, // length
-      32, // radial segments
+      64, // radial segments - more for smoother appearance
       1, // height segments
       true // open ended
     );
