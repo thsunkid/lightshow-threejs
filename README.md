@@ -1,8 +1,10 @@
-# Lightshow Generator
+# Lightshow
 
-**Generate concert-style lighting shows from audio input, inspired by Justice's live performances.**
+**Perform concert-style lighting shows from audio input.**
 
-## Vision
+![Lightshow Screenshot](docs/lightshow.png)
+
+## Idea
 
 Given a music track (e.g., Justice - Neverender), automatically generate a synchronized 3D lightshow simulation that captures the energy, rhythm, and emotional arc of the music — with intelligent show planning based on song structure.
 
@@ -23,13 +25,13 @@ Drop an MP3 file into the browser, and watch as the 3D stage comes alive with li
     ║   [MH]    [MH]    [MH]    [MH]    [MH]    [MH]        ║
     ╠═══════════════════════════════════════════════════════╣
     ║                                                       ║
-    ║   ┌───┐          ╔═══════════════════╗          ┌───┐ ║
-    ║   │[W]│          ║                   ║          │[W]│ ║
-    ║   │   │          ║   LED SCREEN      ║          │   │ ║
-    ║   │[S]│  TOWER   ║   (Particles)     ║  TOWER   │[S]│ ║
-    ║   │   │          ║                   ║          │   │ ║
-    ║   │[W]│          ║                   ║          │[W]│ ║
-    ║   └───┘          ╚═══════════════════╝          └───┘ ║
+    ║   ┌───┐          ╔═══════════════════╗          ┌───┐    ║
+    ║   │[W]│          ║                ║          │[W]│    ║
+    ║   │   │          ║   LED SCREEN   ║          │   │    ║
+    ║   │[S]│  TOWER   ║   (Particles)  ║  TOWER   │[S]│    ║
+    ║   │   │          ║                ║          │   │    ║
+    ║   │[W]│          ║                ║          │[W]│    ║
+    ║   └───┘          ╚═══════════════════╝          └───┘    ║
     ║                                                       ║
     ╠═══════════════════════════════════════════════════════╣
     ║                   STAGE FLOOR                         ║
@@ -48,6 +50,8 @@ Drop an MP3 file into the browser, and watch as the 3D stage comes alive with li
     [W]  = Wash Light (area flood lighting)
     [S]  = Strobe (flash effect)
 ```
+
+![Light stage layout](docs/light-stage.png)
 
 ## Features
 
@@ -242,40 +246,6 @@ During playback, every frame:
 - Applies lighting variations with randomization
 - Updates all fixtures with smooth transitions
 - Renders 3D scene with bloom post-processing
-
----
-
-## Roadmap
-
-### Completed
-- [x] Real-time audio analysis with Meyda.js
-- [x] BPM detection and beat grid generation
-- [x] Section detection (energy-based heuristics)
-- [x] 3D concert stage with realistic geometry
-- [x] Moving heads with volumetric beams
-- [x] Strobes and wash lights
-- [x] Flake light particle system
-- [x] LED particle panel with curl noise shaders
-- [x] Spotify-style player UI
-- [x] Analysis caching in IndexedDB
-- [x] Show planner with predefined looks
-- [x] Lighting variations for non-predictable responses
-- [x] Console streaming to terminal for debugging
-
-### In Progress
-- [ ] Integration testing of all new systems
-- [ ] Performance optimization
-
-### Future
-- [ ] Improve section detection with ML
-- [ ] Add key/chord detection
-- [ ] Implement laser fixtures
-- [ ] Add gobo patterns for moving heads
-- [ ] Add fog/haze particle system
-- [ ] Video file processing for style learning
-- [ ] ML-based style transfer (Skip-BART)
-- [ ] Style selector UI
-- [ ] Video recording/export
 
 ---
 
