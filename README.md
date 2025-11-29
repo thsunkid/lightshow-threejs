@@ -6,378 +6,371 @@
 
 Given a music track (e.g., Justice - Neverender), automatically generate a synchronized 3D lightshow simulation that captures the energy, rhythm, and emotional arc of the music — with the ability to learn and replicate lighting styles from real concert footage.
 
-## Background
+## Demo
 
-Professional concert lighting is typically programmed manually by lighting designers who craft cues synchronized to song structure. This project explores automating that process through:
+Drop an MP3 file into the browser, and watch as the 3D stage comes alive with lights that react to:
+- **Beats** — Intensity pulses and strobe flashes
+- **Bass** — Moving head tilt and wash light intensity
+- **Energy** — Overall brightness and color temperature
+- **Spectral content** — Color shifts from warm to cool
+- **Song sections** — Dramatic changes on drops and breakdowns
 
-1. **Audio analysis** — Extracting musical features (beats, energy, spectral content, structure)
-2. **Style learning** — Optionally learning lighting patterns from reference concert videos
-3. **Generative mapping** — Translating audio features into lighting parameters
-4. **3D simulation** — Rendering realistic volumetric lighting in the browser
+## Features
+
+- **Real-time audio analysis** with BPM detection, beat grid, and section detection
+- **3D concert stage** with moving heads, strobes, wash lights, and volumetric beams
+- **Spotify-like player UI** with album art, progress bar, and playback controls
+- **Style presets** inspired by Justice, minimal techno, and EDM festivals
+- **Pre-analysis** of entire songs before playback for perfect sync
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           LIGHTSHOW GENERATOR                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   WORKSTREAM A              WORKSTREAM B              WORKSTREAM C      │
-│   ─────────────             ─────────────             ─────────────     │
-│   Audio Analysis            3D Stage/Lights           Style Learning    │
-│                                                                         │
-│   ┌───────────┐             ┌───────────┐             ┌───────────┐     │
-│   │ Audio In  │             │ Three.js  │             │ YouTube   │     │
-│   │ (MP3/WAV) │             │ Scene     │             │ Video In  │     │
-│   └─────┬─────┘             └─────┬─────┘             └─────┬─────┘     │
-│         │                         │                         │           │
-│         ▼                         ▼                         ▼           │
-│   ┌───────────┐             ┌───────────┐             ┌───────────┐     │
-│   │ Meyda.js  │             │ Volumetric│             │ Frame     │     │
-│   │ Essentia  │             │ Lights    │             │ Analyzer  │     │
-│   └─────┬─────┘             └─────┬─────┘             └─────┬─────┘     │
-│         │                         │                         │           │
-│         ▼                         ▼                         ▼           │
-│   ┌───────────┐             ┌───────────┐             ┌───────────┐     │
-│   │ Feature   │             │ Fixture   │             │ Light     │     │
-│   │ Vector    │             │ Controls  │             │ State     │     │
-│   │ Stream    │             │ API       │             │ Extractor │     │
-│   └─────┬─────┘             └─────┬─────┘             └─────┬─────┘     │
-│         │                         │                         │           │
-│         └────────────┬────────────┘                         │           │
-│                      │                                      │           │
-│                      ▼                                      │           │
-│              ┌───────────────┐                              │           │
-│              │    MAPPING    │◄─────────────────────────────┘           │
-│              │    ENGINE     │  (learned rules / ML model)              │
-│              │               │                                          │
-│              │ audio features│                                          │
-│              │      ──►      │                                          │
-│              │ light params  │                                          │
-│              └───────────────┘                                          │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LIGHTSHOW GENERATOR                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   AUDIO ANALYSIS              3D STAGE                   STYLE LEARNING     │
+│   ──────────────              ────────                   ──────────────     │
+│                                                                             │
+│   ┌───────────┐             ┌───────────┐             ┌───────────┐         │
+│   │ MP3/WAV   │             │ Three.js  │             │ Video     │         │
+│   │ Input     │             │ Scene     │             │ Analysis  │         │
+│   └─────┬─────┘             └─────┬─────┘             └─────┬─────┘         │
+│         │                         │                         │               │
+│         ▼                         ▼                         ▼               │
+│   ┌───────────┐             ┌───────────┐             ┌───────────┐         │
+│   │ Tone.js + │             │ Volumetric│             │ Color &   │         │
+│   │ Meyda.js  │             │ Lights    │             │ Pattern   │         │
+│   └─────┬─────┘             └─────┬─────┘             └─────┬─────┘         │
+│         │                         │                         │               │
+│         ▼                         ▼                         ▼               │
+│   ┌───────────┐             ┌───────────┐             ┌───────────┐         │
+│   │ BPM +     │             │ Fixtures: │             │ Style     │         │
+│   │ Beat Grid │             │ MH/Strobe │             │ Profiles  │         │
+│   │ + Sections│             │ /Wash     │             │ + Rules   │         │
+│   └─────┬─────┘             └─────┬─────┘             └─────┬─────┘         │
+│         │                         │                         │               │
+│         └────────────┬────────────┘                         │               │
+│                      │                                      │               │
+│                      ▼                                      │               │
+│              ┌───────────────┐                              │               │
+│              │    MAPPING    │◄─────────────────────────────┘               │
+│              │    ENGINE     │                                              │
+│              │               │                                              │
+│              │ AudioFrame ─► │                                              │
+│              │ LightingCmd   │                                              │
+│              └───────────────┘                                              │
+│                      │                                                      │
+│                      ▼                                                      │
+│              ┌───────────────┐                                              │
+│              │  PLAYER UI    │                                              │
+│              │  (Spotify-    │                                              │
+│              │   style)      │                                              │
+│              └───────────────┘                                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Tech Stack
+
+| Category | Technologies |
+|----------|--------------|
+| **Frontend** | TypeScript, Vite |
+| **3D Rendering** | Three.js, postprocessing (bloom) |
+| **Audio Playback** | Tone.js, Web Audio API |
+| **Audio Analysis** | Meyda.js, web-audio-beat-detector |
+| **Metadata** | jsmediatags (ID3 tags, album art) |
+| **Style Learning** | Canvas API, k-means clustering |
+| **Build Tools** | Vite, TypeScript |
 
 ---
 
 ## Workstreams
 
-Each workstream can be developed independently and merged once interfaces are defined.
+The project is organized into four workstreams that can be developed independently.
 
 ---
 
 ### Workstream A: Audio Analysis Pipeline
 
-**Owner:** TBD
-**Goal:** Extract musically-meaningful features from audio in real-time
+**Goal:** Extract musically-meaningful features from audio with pre-analysis and real-time processing
 
-#### Deliverables
+#### Components
 
-1. **Audio loader** — Accept MP3/WAV, decode to Web Audio API
-2. **Feature extractor** — Real-time stream of audio features per frame
-3. **Beat/structure detector** — Identify beats, downbeats, drops, builds
-4. **Output interface** — Standardized feature vector format
-
-#### Tech Stack
-
-| Library | Purpose |
-|---------|---------|
-| Web Audio API | Audio decoding and playback |
-| Meyda.js | Real-time spectral features (RMS, centroid, flux, MFCC) |
-| Essentia.js | Beat tracking, tempo, key detection (WASM) |
-| Clubber.js | Music-theory-aware MIDI note binning (optional) |
+| File | Purpose |
+|------|---------|
+| `AudioAnalyzer.ts` | Basic real-time audio analysis |
+| `AdvancedAnalyzer.ts` | Pre-analysis with BPM detection, beat grid, sections |
+| `FeatureExtractor.ts` | Meyda.js wrapper for spectral features |
+| `BeatDetector.ts` | Energy-based beat detection |
+| `BeatGrid.ts` | Beat timing, quantization, bar tracking |
+| `CueScheduler.ts` | Beat-synced lighting cue scheduling |
 
 #### Output Format
 
 ```typescript
 interface AudioFrame {
-  timestamp: number;        // ms from start
+  timestamp: number;
 
   // Rhythm
   isBeat: boolean;
   isDownbeat: boolean;
-  tempo: number;            // BPM
-  beatPhase: number;        // 0-1 position within beat
+  tempo: number;
+  beatPhase: number;
+  beatNumber: number;
 
   // Energy
-  rms: number;              // 0-1 overall loudness
-  energy: number;           // 0-1 perceived energy
+  rms: number;
+  energy: number;
+  peak: number;
 
   // Spectral
-  spectralCentroid: number; // brightness
-  spectralFlux: number;     // rate of change
-  lowEnergy: number;        // bass 0-1
-  midEnergy: number;        // mids 0-1
-  highEnergy: number;       // highs 0-1
+  spectralCentroid: number;
+  spectralFlux: number;
+  lowEnergy: number;
+  midEnergy: number;
+  highEnergy: number;
 
-  // Structure (if detected)
+  // Structure
   section?: 'intro' | 'verse' | 'chorus' | 'drop' | 'breakdown' | 'outro';
+}
+
+// Enhanced frequency bands (AdvancedAnalyzer)
+interface FrequencyBands {
+  sub: number;      // 20-60 Hz (sub bass)
+  bass: number;     // 60-250 Hz (kick, bass)
+  lowMid: number;   // 250-500 Hz (low vocals, toms)
+  mid: number;      // 500-2000 Hz (vocals, snare)
+  highMid: number;  // 2000-6000 Hz (hi-hats, presence)
+  high: number;     // 6000-20000 Hz (air, cymbals)
 }
 ```
 
 #### Tasks
 
-- [ ] Set up Web Audio API audio loading and playback
-- [ ] Integrate Meyda.js for real-time feature extraction
-- [ ] Integrate Essentia.js for beat tracking
-- [ ] Create AudioAnalyzer class with standardized output
-- [ ] Add song structure detection (optional, can use ML or heuristics)
-- [ ] Write unit tests with known audio samples
-- [ ] Document API and usage examples
+- [x] Set up Web Audio API audio loading and playback
+- [x] Integrate Meyda.js for real-time feature extraction
+- [x] Create AudioAnalyzer class with standardized output
+- [x] Implement energy-based beat detection
+- [x] Add BPM pre-analysis with web-audio-beat-detector
+- [x] Create BeatGrid for beat timing and quantization
+- [x] Implement CueScheduler for beat-synced events
+- [x] Add 6-band frequency analysis
+- [x] Add song section detection (energy-based heuristics)
+- [ ] Improve section detection with ML
+- [ ] Add key/chord detection
 
 ---
 
 ### Workstream B: 3D Stage & Lighting Simulation
 
-**Owner:** TBD
 **Goal:** Render a realistic 3D concert stage with controllable lighting fixtures
 
-#### Deliverables
+#### Components
 
-1. **Stage scene** — 3D environment (stage, truss, haze)
-2. **Fixture library** — Moving heads, strobes, wash lights, lasers
-3. **Volumetric rendering** — Visible light beams through atmosphere
-4. **Control API** — Programmatic control of all fixtures
+| File | Purpose |
+|------|---------|
+| `Stage.ts` | Three.js scene, camera, renderer, post-processing |
+| `LightingController.ts` | Fixture management, command execution |
+| `fixtures/BaseFixture.ts` | Abstract base class with transitions |
+| `fixtures/MovingHead.ts` | Pan/tilt spotlight with volumetric beam |
+| `fixtures/Strobe.ts` | Flash effect fixture |
+| `fixtures/WashLight.ts` | Area flood lighting |
 
-#### Tech Stack
+#### Stage Layout
 
-| Library | Purpose |
-|---------|---------|
-| Three.js | 3D rendering engine |
-| three-volumetric-spotlight | Volumetric light cones |
-| postprocessing | Bloom, god rays, effects |
-| lil-gui / dat.gui | Debug controls |
+```
+                         ┌─────────────────────────┐
+                         │     LED BACK WALL       │
+                         └─────────────────────────┘
+                               BACK TRUSS
+                    ═══════════════════════════════════
+                    ║  MH  MH  MH  MH  MH  MH  MH  MH  ║
+              SIDE  ║                                   ║  SIDE
+             TRUSS  ║                                   ║ TRUSS
+                    ║     ┌─────────────────────┐       ║
+               WASH ║     │                     │       ║ WASH
+              LIGHTS║     │    STAGE FLOOR      │       ║LIGHTS
+                    ║     │                     │       ║
+                    ║     └─────────────────────┘       ║
+                    ═══════════════════════════════════
+                          FRONT TRUSS (6 MH)
+
+                         [STROBE] [STROBE] [STROBE] [STROBE]
+
+                    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+                              AUDIENCE AREA
+```
 
 #### Fixture Types
 
 ```typescript
 interface MovingHead {
-  id: string;
-  position: Vector3;
-
-  // Control parameters (0-1 normalized)
-  pan: number;              // horizontal rotation
-  tilt: number;             // vertical rotation
-  intensity: number;        // brightness
-  color: { r: number, g: number, b: number };
-  beamWidth: number;        // spot to flood
-  gobo?: string;            // pattern projection
+  pan: number;        // 0-1 horizontal
+  tilt: number;       // 0-1 vertical
+  intensity: number;  // 0-1 brightness
+  color: RGB;
+  beamWidth: number;  // 0-1 spot to flood
+  speed: number;      // 0-1 movement speed
 }
 
 interface Strobe {
-  id: string;
-  position: Vector3;
   intensity: number;
-  rate: number;             // flashes per second
-  color: { r: number, g: number, b: number };
+  rate: number;       // Hz (flashes per second)
+  color: RGB;
+  flashDuration: number;
 }
 
 interface WashLight {
-  id: string;
-  position: Vector3;
   intensity: number;
-  color: { r: number, g: number, b: number };
-  spread: number;
+  color: RGB;
+  spread: number;     // 0-1 narrow to wide
 }
-```
-
-#### Stage Layout (Initial)
-
-```
-              [BACK TRUSS - 8 moving heads]
-                    ████████████
-
-        [LEFT]                        [RIGHT]
-        4 wash                        4 wash
-        lights                        lights
-
-                    ┌────────┐
-                    │ STAGE  │
-                    │        │
-                    └────────┘
-
-              [FRONT TRUSS - 6 moving heads]
-                    ████████████
-
-                    [STROBES x4]
 ```
 
 #### Tasks
 
-- [ ] Set up Three.js scene with stage geometry
-- [ ] Implement basic spotlight fixtures
-- [ ] Add volumetric light rendering (beams visible in haze)
-- [ ] Create MovingHead class with pan/tilt/color controls
-- [ ] Create Strobe class with rate control
-- [ ] Create WashLight class
-- [ ] Build fixture group/universe management
-- [ ] Add bloom and post-processing effects
-- [ ] Implement camera controls (orbit, preset angles)
-- [ ] Create LightingController API for external control
-- [ ] Performance optimization (instancing, LOD)
-- [ ] Document fixture API
+- [x] Set up Three.js scene with stage geometry
+- [x] Create raised stage platform with reflective floor
+- [x] Add truss structures (square profile with cross-bracing)
+- [x] Add LED back wall/screen
+- [x] Implement MovingHead with pan/tilt/color controls
+- [x] Add volumetric beam effect with shaders
+- [x] Create Strobe class with rate control
+- [x] Create WashLight class
+- [x] Build LightingController for command execution
+- [x] Add bloom post-processing effects
+- [x] Implement camera presets (front, side, top, dynamic)
+- [x] Add speaker stacks and stage monitors
+- [x] Add audience area with barrier
+- [ ] Add laser fixtures
+- [ ] Implement gobo patterns
+- [ ] Add fog/haze particle system
 
 ---
 
 ### Workstream C: Style Learning from Video
 
-**Owner:** TBD
 **Goal:** Extract lighting patterns from concert footage to learn a "style"
 
-#### Deliverables
+#### Components
 
-1. **Video frame analyzer** — Extract lighting states from video frames
-2. **Audio-visual pairing** — Align extracted states with audio features
-3. **Style profile generator** — Create reusable lighting style rules/model
-4. **Inference engine** — Apply learned style to new audio
+| File | Purpose |
+|------|---------|
+| `VideoAnalyzer.ts` | Frame analysis, color extraction |
+| `StyleLearner.ts` | Audio-visual correlation, rule extraction |
+| `StyleProfile.ts` | Profile management, presets, persistence |
 
-#### Approach Options
+#### Built-in Presets
 
-**Option 1: Rule Extraction (Simpler)**
-- Analyze video frames for dominant colors, brightness regions
-- Correlate with audio features at same timestamps
-- Extract rules like: "when energy > 0.8 AND beat → strobe flash"
-- Build probabilistic style profile
-
-**Option 2: ML Model (Skip-BART)**
-- Use pre-trained Skip-BART model for audio → lighting generation
-- Fine-tune on extracted video data if possible
-- Run inference in browser via ONNX.js or TensorFlow.js
-
-#### Tech Stack
-
-| Library | Purpose |
-|---------|---------|
-| OpenCV.js | Frame analysis, color extraction |
-| TensorFlow.js | ML inference in browser |
-| Skip-BART | Pre-trained lighting generation model |
-| yt-dlp | YouTube video/audio download (preprocessing) |
-| FFmpeg | Frame extraction (preprocessing) |
-
-#### Video Analysis Output
-
-```typescript
-interface LightingState {
-  timestamp: number;
-
-  // Global
-  overallBrightness: number;  // 0-1
-  dominantColors: RGB[];      // top 3-5 colors
-
-  // Spatial (divide frame into regions)
-  regions: {
-    position: 'left' | 'center' | 'right' | 'back';
-    brightness: number;
-    color: RGB;
-    hasBeam: boolean;
-    beamAngle?: number;
-  }[];
-
-  // Events
-  isStrobe: boolean;
-  isBlackout: boolean;
-  isColorChange: boolean;
-}
-```
+| Preset | Description |
+|--------|-------------|
+| `justice-style` | Dramatic, intense - magenta/red washes, white strobes on drops |
+| `minimal-techno` | Monochrome, subtle - kick pulses, occasional blackouts |
+| `edm-festival` | Vibrant, high-energy - rainbow colors, constant movement |
 
 #### Style Profile Format
 
 ```typescript
 interface StyleProfile {
   name: string;
-  source: string;  // e.g., "Justice - Neverender (Accor Arena 2024)"
+  source: string;
 
-  // Color palette preferences
   palette: {
     primary: RGB[];
     accent: RGB[];
     strobeColor: RGB;
   };
 
-  // Behavioral rules
-  rules: {
-    onBeat: { action: string; probability: number }[];
-    onDrop: { action: string; probability: number }[];
-    energyMapping: { threshold: number; action: string }[];
-    // etc.
-  };
+  rules: StyleRule[];
 
-  // Or: trained model weights
-  modelWeights?: ArrayBuffer;
+  // Statistics
+  avgBrightness: number;
+  brightnessVariance: number;
+  colorChangeRate: number;
+  strobeRate: number;
+}
+
+interface StyleRule {
+  trigger: {
+    onBeat?: boolean;
+    onDownbeat?: boolean;
+    energyThreshold?: number;
+    sections?: SongSection[];
+  };
+  action: {
+    type: 'strobe' | 'color_change' | 'intensity_pulse' | 'movement';
+    targets: FixtureType[];
+    durationMs: number;
+  };
+  probability: number;
 }
 ```
 
 #### Tasks
 
-- [ ] Research Skip-BART implementation and requirements
-- [ ] Build video frame extraction pipeline (preprocessing)
-- [ ] Implement frame color/brightness analyzer with OpenCV.js
-- [ ] Create audio-visual alignment tool
-- [ ] Design style profile format
-- [ ] Implement rule extraction algorithm
-- [ ] (Optional) Set up TensorFlow.js for ML inference
-- [ ] (Optional) Integrate Skip-BART or train custom model
-- [ ] Create StyleLearner class
-- [ ] Document style learning workflow
+- [x] Implement VideoAnalyzer with canvas-based frame analysis
+- [x] Add dominant color extraction (k-means clustering)
+- [x] Create StyleLearner with rule extraction
+- [x] Build StyleProfile manager with localStorage persistence
+- [x] Create built-in presets (justice-style, minimal-techno, edm-festival)
+- [x] Add strobe detection (brightness spike analysis)
+- [ ] Implement actual video file processing
+- [ ] Add ML-based style transfer (Skip-BART integration)
 
 ---
 
 ### Workstream D: Mapping Engine & Integration
 
-**Owner:** TBD
 **Goal:** Connect audio features to lighting controls, merge all workstreams
 
-#### Deliverables
+#### Components
 
-1. **Mapping engine** — Transform audio features → lighting parameters
-2. **Rule system** — Configurable rules for reactive behavior
-3. **Style applicator** — Apply learned styles to generation
-4. **Main application** — Unified UI bringing it all together
+| File | Purpose |
+|------|---------|
+| `MappingEngine.ts` | AudioFrame → LightingCommand processing |
+| `rules/RuleEvaluator.ts` | Style rule evaluation |
+| `rules/DefaultRules.ts` | Built-in mapping behaviors |
 
 #### Mapping Strategies
 
 ```typescript
-// Direct mapping
-intensity = audioFrame.rms;
+// Default behavior (no style loaded)
+intensity = audioFrame.rms * config.intensityScale;
+color = hslToRgb(audioFrame.spectralCentroid * 0.7, 0.8, 0.5);
 
-// Threshold-based
-if (audioFrame.isBeat) triggerStrobe();
+if (audioFrame.isBeat) {
+  triggerIntensityPulse(1.0, 100);
+}
 
-// Smoothed/eased
-intensity = lerp(currentIntensity, targetIntensity, 0.1);
+if (audioFrame.isDownbeat) {
+  rotatePalette();
+}
 
-// Style-influenced
-const action = style.rules.onBeat.sample();
-executeAction(action);
+// Moving heads follow bass
+movingHeadTilt = audioFrame.lowEnergy;
+beamWidth = audioFrame.energy * 0.5 + 0.2;
 ```
 
 #### Tasks
 
-- [ ] Define mapping interface between Workstream A and B
-- [ ] Implement basic rule-based mapper
-- [ ] Add smoothing and easing for natural transitions
-- [ ] Integrate style profiles from Workstream C
-- [ ] Build main application shell
-- [ ] Create UI for audio upload and playback
-- [ ] Add style selection/loading
-- [ ] Implement real-time visualization
-- [ ] Add export options (video recording?)
-- [ ] Performance testing and optimization
-- [ ] End-to-end integration testing
+- [x] Implement MappingEngine with AudioFrame processing
+- [x] Create RuleEvaluator for style rule evaluation
+- [x] Build default mapping behaviors
+- [x] Add smoothing and easing utilities
+- [x] Implement rate limiting for strobes
+- [x] Connect to Stage for command execution
+- [x] Create main application with drag-and-drop
+- [x] Build Spotify-like player UI
+- [x] Add album art extraction with jsmediatags
+- [x] Implement progress bar with seeking
+- [ ] Add style selector UI
+- [ ] Implement video recording/export
 
 ---
-
-## Tech Stack Summary
-
-| Category | Technologies |
-|----------|--------------|
-| **Frontend** | TypeScript, Vite, React (optional) |
-| **3D Rendering** | Three.js, postprocessing |
-| **Audio Analysis** | Web Audio API, Meyda.js, Essentia.js |
-| **Video Analysis** | OpenCV.js, TensorFlow.js |
-| **ML Models** | Skip-BART, ONNX.js |
-| **Build Tools** | Vite, ESBuild |
 
 ## Getting Started
 
@@ -391,51 +384,57 @@ npm install
 
 # Start development server
 npm run dev
+
+# Open http://localhost:3000 and drop an MP3 file
 ```
 
-## Project Structure (Proposed)
+## Project Structure
 
 ```
 lightshow/
 ├── README.md
 ├── package.json
+├── index.html                 # Main HTML with player UI
 ├── src/
-│   ├── audio/              # Workstream A
+│   ├── index.ts               # Main application entry
+│   ├── shared/
+│   │   └── types.ts           # Shared TypeScript interfaces
+│   ├── audio/                 # Workstream A
 │   │   ├── AudioAnalyzer.ts
-│   │   ├── features/
-│   │   └── types.ts
-│   ├── stage/              # Workstream B
+│   │   ├── AdvancedAnalyzer.ts
+│   │   ├── FeatureExtractor.ts
+│   │   ├── BeatDetector.ts
+│   │   ├── BeatGrid.ts
+│   │   └── CueScheduler.ts
+│   ├── stage/                 # Workstream B
 │   │   ├── Stage.ts
-│   │   ├── fixtures/
-│   │   │   ├── MovingHead.ts
-│   │   │   ├── Strobe.ts
-│   │   │   └── WashLight.ts
-│   │   └── LightingController.ts
-│   ├── style/              # Workstream C
+│   │   ├── LightingController.ts
+│   │   └── fixtures/
+│   │       ├── BaseFixture.ts
+│   │       ├── MovingHead.ts
+│   │       ├── Strobe.ts
+│   │       └── WashLight.ts
+│   ├── style/                 # Workstream C
 │   │   ├── VideoAnalyzer.ts
 │   │   ├── StyleLearner.ts
 │   │   └── StyleProfile.ts
-│   ├── mapping/            # Workstream D
-│   │   ├── MappingEngine.ts
-│   │   └── rules/
-│   ├── app/                # Main application
-│   │   ├── App.ts
-│   │   └── ui/
-│   └── index.ts
+│   └── mapping/               # Workstream D
+│       ├── MappingEngine.ts
+│       └── rules/
+│           ├── RuleEvaluator.ts
+│           └── DefaultRules.ts
 ├── public/
 │   └── assets/
-├── scripts/                # Preprocessing tools
-│   ├── extract-frames.sh
-│   └── download-video.sh
 └── tests/
 ```
 
 ## References
 
-- [Essentia.js Documentation](https://mtg.github.io/essentia.js/)
+- [Tone.js Documentation](https://tonejs.github.io/)
 - [Meyda.js Documentation](https://meyda.js.org/)
-- [Clubber.js GitHub](https://github.com/wizgrav/clubber)
 - [Three.js Documentation](https://threejs.org/docs/)
+- [web-audio-beat-detector](https://github.com/chrisguttandin/web-audio-beat-detector)
+- [jsmediatags](https://github.com/aadsm/jsmediatags)
 - [Skip-BART Paper](https://arxiv.org/abs/2506.01482) | [GitHub](https://github.com/RS2002/Skip-BART)
 - [Awesome Audio Visualization](https://github.com/willianjusten/awesome-audio-visualization)
 
@@ -445,16 +444,6 @@ lightshow/
 - Deadmau5 cube shows
 - Eric Prydz HOLO
 - Daft Punk Alive 2007
-
----
-
-## Contributing
-
-1. Pick a workstream
-2. Check the task list in that section
-3. Create a feature branch: `git checkout -b workstream-a/audio-loader`
-4. Implement and test
-5. Submit PR with documentation
 
 ## License
 
